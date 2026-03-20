@@ -303,7 +303,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
         const anchorDx = isDragging && drag.regionType === 'anchor' && dragPreview ? dragPreview.x : 0;
         const anchorDy = isDragging && drag.regionType === 'anchor' && dragPreview ? dragPreview.y : 0;
         return (
-          <g key={field.id}
+          <g key={field.id} data-field-id={field.id}
             style={{ display: isHidden ? 'none' : undefined }}>
             <FieldOverlay field={field} pw={pageWidth} ph={pageHeight}
               currentPage={currentPage} onRemove={() => removeField(field.id)} result={resultByKey[`${field.source ?? 'a'}:${field.label}`] ?? resultByKey[field.label] ?? null}
@@ -638,7 +638,7 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
             const labelBarWidth = Math.max(vDim.x, field.label.length * 8 + (hasResult ? 36 : 16));
             return (
             <>
-              <rect x={vPos.x} y={vPos.y} width={vDim.x} height={vDim.y}
+              <rect data-field-value={field.id} x={vPos.x} y={vPos.y} width={vDim.x} height={vDim.y}
                 fill={valueColor.fill}
                 stroke={isDraggingValue ? 'rgb(99,102,241)' : isEditing ? 'rgb(99,102,241)' : valueColor.stroke}
                 strokeWidth={isDraggingValue ? 3 : isEditing ? 3 : hasResult ? 3 : 2}
