@@ -1,0 +1,263 @@
+{
+  "id": "32b39fc9-e7ee-459a-9e9b-d5f4912dcd4f",
+  "name": "test2",
+  "fields": [
+    {
+      "id": "d6b992f1-ecd2-4610-aad3-7058af2c612a",
+      "label": "company",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.09967320261437909,
+        "y": 0.07702020202020202,
+        "width": 0.43137254901960786,
+        "height": 0.056818181818181816
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "exact_match",
+          "expected_value": "Meridian Technologies Inc.",
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ],
+      "value_format": null,
+      "chain": []
+    },
+    {
+      "id": "21a9f19b-a95b-4d7a-b231-75597689d0bf",
+      "label": "address",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.10947712418300654,
+        "y": 0.1388888888888889,
+        "width": 0.2565359477124183,
+        "height": 0.04040404040404041
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "exact_match",
+          "expected_value": "4200 Westpark Drive, Suite 300\nMcLean, VA 22102",
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ],
+      "value_format": null,
+      "chain": []
+    },
+    {
+      "id": "3a8a6820-0c35-413f-9fb8-d11d022a969e",
+      "label": "gross value",
+      "type": "dynamic",
+      "value_region": {
+        "page": 1,
+        "x": 0.6813725490196079,
+        "y": 0.49747474747474746,
+        "width": 0.13398692810457516,
+        "height": 0.020202020202020204
+      },
+      "anchor_region": {
+        "page": 1,
+        "x": 0.5359477124183006,
+        "y": 0.4962121212121212,
+        "width": 0.119281045751634,
+        "height": 0.01893939393939394
+      },
+      "expected_anchor_text": "gross pay",
+      "rules": [],
+      "value_format": null,
+      "chain": []
+    },
+    {
+      "id": "f27c7af7-3d4f-48f8-91ca-5954fc00a252",
+      "label": "pay date",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.511437908496732,
+        "y": 0.19823232323232323,
+        "width": 0.1111111111111111,
+        "height": 0.021464646464646464
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "date_before",
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": "2026-03-18",
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ],
+      "value_format": null,
+      "chain": []
+    },
+    {
+      "id": "2d6d8a9c-d7ce-46e3-be5d-072e075358c4",
+      "label": "department",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.6143790849673203,
+        "y": 0.3106060606060606,
+        "width": 0.12418300653594772,
+        "height": 0.023989898989898988
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "one_of",
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": [
+            "Engineering",
+            "HR",
+            "Operations"
+          ],
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ],
+      "value_format": null,
+      "chain": []
+    },
+    {
+      "id": "ef97c878-0988-4dca-884c-916b5e40c3c4",
+      "label": "net value",
+      "type": "dynamic",
+      "value_region": {
+        "page": 1,
+        "x": 0.5021786492374728,
+        "y": 0.8232323232323232,
+        "width": 0.23529411764705882,
+        "height": 0.050505050505050504
+      },
+      "anchor_region": {
+        "page": 1,
+        "x": 0.12091503267973856,
+        "y": 0.8249158249158249,
+        "width": 0.22875816993464052,
+        "height": 0.045454545454545456
+      },
+      "expected_anchor_text": "net label",
+      "rules": [],
+      "value_format": "currency",
+      "chain": [
+        {
+          "id": "72e0d0dd-d2a5-4c09-ba0e-05f5c55431b8",
+          "category": "search",
+          "type": "exact_position",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "1d15d797-bd42-44b4-854a-85c8c6cf0ffe",
+          "category": "search",
+          "type": "vertical_slide",
+          "slide_tolerance": 0.3,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "783e86b0-79b3-4739-97f0-1e09f6e92be6",
+          "category": "search",
+          "type": "full_page_search",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "df74164b-e4fb-405e-800b-ce918fe2f578",
+          "category": "value",
+          "type": "offset_value",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "6d5082a1-7673-4520-9fb4-bab45a1ff7f2",
+          "category": "value",
+          "type": "adjacent_scan",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": "right",
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ]
+    }
+  ],
+  "created_at": "2026-03-19T15:52:10.449502Z"
+}

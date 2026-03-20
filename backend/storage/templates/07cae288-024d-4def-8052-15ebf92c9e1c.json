@@ -1,0 +1,172 @@
+{
+  "id": "07cae288-024d-4def-8052-15ebf92c9e1c",
+  "name": "test1",
+  "fields": [
+    {
+      "id": "d6b992f1-ecd2-4610-aad3-7058af2c612a",
+      "label": "company",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.09967320261437909,
+        "y": 0.07702020202020202,
+        "width": 0.43137254901960786,
+        "height": 0.056818181818181816
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "exact_match",
+          "expected_value": "Meridian Technologies Inc.",
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ]
+    },
+    {
+      "id": "21a9f19b-a95b-4d7a-b231-75597689d0bf",
+      "label": "address",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.10947712418300654,
+        "y": 0.1388888888888889,
+        "width": 0.2565359477124183,
+        "height": 0.04040404040404041
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "exact_match",
+          "expected_value": "4200 Westpark Drive, Suite 300\nMcLean, VA 22102",
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ]
+    },
+    {
+      "id": "3a8a6820-0c35-413f-9fb8-d11d022a969e",
+      "label": "gross value",
+      "type": "dynamic",
+      "value_region": {
+        "page": 1,
+        "x": 0.6813725490196079,
+        "y": 0.49747474747474746,
+        "width": 0.13398692810457516,
+        "height": 0.020202020202020204
+      },
+      "anchor_region": {
+        "page": 1,
+        "x": 0.5359477124183006,
+        "y": 0.4962121212121212,
+        "width": 0.119281045751634,
+        "height": 0.01893939393939394
+      },
+      "expected_anchor_text": "gross pay",
+      "rules": []
+    },
+    {
+      "id": "f27c7af7-3d4f-48f8-91ca-5954fc00a252",
+      "label": "pay date",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.511437908496732,
+        "y": 0.19823232323232323,
+        "width": 0.1111111111111111,
+        "height": 0.021464646464646464
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "date_before",
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": "2026-03-18",
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ]
+    },
+    {
+      "id": "2d6d8a9c-d7ce-46e3-be5d-072e075358c4",
+      "label": "department",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.6143790849673203,
+        "y": 0.3106060606060606,
+        "width": 0.12418300653594772,
+        "height": 0.023989898989898988
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "one_of",
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": [
+            "Engineering",
+            "HR",
+            "Operations"
+          ],
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ]
+    },
+    {
+      "id": "e650fe07-b2ac-4acb-a2af-7837fb6cfb5a",
+      "label": "net",
+      "type": "static",
+      "value_region": {
+        "page": 1,
+        "x": 0.5016339869281046,
+        "y": 0.7891414141414141,
+        "width": 0.20588235294117646,
+        "height": 0.054292929292929296
+      },
+      "anchor_region": null,
+      "expected_anchor_text": null,
+      "rules": [
+        {
+          "type": "data_type",
+          "expected_value": null,
+          "data_type": "currency",
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ]
+    }
+  ],
+  "created_at": "2026-03-19T15:48:56.780592Z"
+}
