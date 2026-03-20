@@ -65,6 +65,7 @@ interface Props {
 
 export default function ExtractionResults({ onClose }: Props) {
   const results = useAppStore((s) => s.extractionResults);
+  const templateMode = useAppStore((s) => s.templateMode);
 
   if (!results || results.length === 0) return null;
 
@@ -118,6 +119,13 @@ export default function ExtractionResults({ onClose }: Props) {
             {/* Field header */}
             <div className="flex items-center gap-2 mb-1.5">
               <TypeBadge fieldType={r.field_type} />
+              {templateMode === 'comparison' && (
+                <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded ${
+                  (r.source ?? 'a') === 'a' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
+                }`}>
+                  {(r.source ?? 'a').toUpperCase()}
+                </span>
+              )}
               <span className="text-sm font-medium text-gray-800 flex-1 truncate">{r.label}</span>
               <StatusBadge status={r.status} />
             </div>

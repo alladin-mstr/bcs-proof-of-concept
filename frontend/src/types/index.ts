@@ -69,6 +69,7 @@ export interface Field {
   rules: Rule[];
   value_format?: "currency" | "number" | "integer" | "date" | "string";
   chain: ChainStep[];
+  source?: "a" | "b";
 }
 
 export interface Template {
@@ -76,6 +77,7 @@ export interface Template {
   name: string;
   fields: Field[];
   created_at: string;
+  mode?: "single" | "comparison";
 }
 
 export interface RuleResult {
@@ -89,6 +91,7 @@ export interface FieldResult {
   field_type: "static" | "dynamic";
   value: string;
   status: "ok" | "anchor_mismatch" | "anchor_not_found" | "anchor_shifted" | "anchor_relocated" | "empty" | "rule_failed";
+  source?: "a" | "b";
   expected_anchor?: string;
   actual_anchor?: string;
   anchor_shift?: string;
@@ -106,4 +109,5 @@ export interface ExtractionResponse {
   template_id: string;
   results: FieldResult[];
   needs_review: boolean;
+  pdf_id_b?: string;
 }

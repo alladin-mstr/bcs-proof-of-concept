@@ -9,6 +9,7 @@ import {
 } from '../api/client';
 import RulesEditor from './RulesEditor';
 import ChainEditor from './ChainEditor';
+import ComparisonFieldsPanel from './ComparisonFieldsPanel';
 
 export default function TemplatePanel() {
   const fields = useAppStore((s) => s.fields);
@@ -18,7 +19,9 @@ export default function TemplatePanel() {
   const editTemplate = useAppStore((s) => s.editTemplate);
   const activeTemplateId = useAppStore((s) => s.activeTemplateId);
   const pdfId = useAppStore((s) => s.pdfId);
+  const pdfIdB = useAppStore((s) => s.pdfIdB);
   const currentPage = useAppStore((s) => s.currentPage);
+  const currentPageB = useAppStore((s) => s.currentPageB);
   const setExtractionResults = useAppStore((s) => s.setExtractionResults);
   const removeField = useAppStore((s) => s.removeField);
   const drawMode = useAppStore((s) => s.drawMode);
@@ -28,6 +31,8 @@ export default function TemplatePanel() {
   const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
   const editingFieldId = useAppStore((s) => s.editingFieldId);
   const setEditingFieldId = useAppStore((s) => s.setEditingFieldId);
+  const templateMode = useAppStore((s) => s.templateMode);
+  const setTemplateMode = useAppStore((s) => s.setTemplateMode);
 
   const [saving, setSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -35,6 +40,12 @@ export default function TemplatePanel() {
   const [isEditing, setIsEditing] = useState(false); // editing an existing template
   const [renamingFieldId, setRenamingFieldId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [comparisonTab, setComparisonTab] = useState<'fields' | 'connections'>('fields');
+
+  const pageFields = fields.filter((f) => {
+    const page = (f.source ?? 'a') === 'b' ? currentPageB : currentPage;
+    return f.value_region.page === page || (f.anchor_region && f.anchor_region.page === page);
+  });
 
   // Mode logic:
   // - Testing: activeTemplateId set + !isEditing
@@ -45,6 +56,12 @@ export default function TemplatePanel() {
   const isCreateMode = activeTemplateId === null;
   const canEditFields = isCreateMode || isEditMode;
   const activeTemplate = templates.find((t) => t.id === activeTemplateId);
+  const setCanDrawFields = useAppStore((s) => s.setCanDrawFields);
+
+  // Sync canDrawFields to store so BboxCanvas knows whether to allow drawing
+  useEffect(() => {
+    setCanDrawFields(canEditFields);
+  }, [canEditFields, setCanDrawFields]);
 
   useEffect(() => {
     listTemplates()
@@ -58,7 +75,7 @@ export default function TemplatePanel() {
     if (!name || !name.trim()) return;
     setSaving(true);
     try {
-      await createTemplate(name.trim(), fields);
+      await createTemplate(name.trim(), fields, templateMode);
       const updated = await listTemplates();
       setTemplates(updated);
     } catch {
@@ -75,7 +92,7 @@ export default function TemplatePanel() {
     if (!name || !name.trim()) return;
     setSaving(true);
     try {
-      await apiUpdateTemplate(activeTemplateId, name.trim(), fields);
+      await apiUpdateTemplate(activeTemplateId, name.trim(), fields, templateMode);
       const updated = await listTemplates();
       setTemplates(updated);
       setIsEditing(false);
@@ -102,10 +119,14 @@ export default function TemplatePanel() {
 
   const handleTest = async () => {
     if (!pdfId || fields.length === 0) return;
+    if (templateMode === 'comparison' && !pdfIdB) {
+      alert('Please select PDF B for comparison mode.');
+      return;
+    }
     setIsTesting(true);
     setExtractionResults(null);
     try {
-      const response = await testExtraction(pdfId, fields);
+      const response = await testExtraction(pdfId, fields, templateMode === 'comparison' ? (pdfIdB ?? undefined) : undefined);
       setExtractionResults(response.results);
     } catch {
       alert('Test failed.');
@@ -206,6 +227,37 @@ export default function TemplatePanel() {
         )}
       </div>
 
+      {/* Template mode toggle (Single / Comparison) — only in create/edit mode */}
+      {canEditFields && (
+        <div className="p-3 border-b border-gray-100">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Template Mode
+          </p>
+          <div className="flex rounded-lg overflow-hidden border border-gray-200">
+            <button
+              onClick={() => setTemplateMode('single')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                templateMode === 'single'
+                  ? 'bg-gray-700 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Single
+            </button>
+            <button
+              onClick={() => setTemplateMode('comparison')}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                templateMode === 'comparison'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Comparison
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Draw mode toggle — only in create/edit mode */}
       {canEditFields && (
         <div className="p-3 border-b border-gray-100">
@@ -254,24 +306,55 @@ export default function TemplatePanel() {
         </div>
       )}
 
-      {/* Fields header */}
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
-          Fields
-        </h2>
-        <span className="text-[10px] text-gray-400">{fields.length} field{fields.length !== 1 ? 's' : ''}</span>
+      {/* Fields header + comparison tab switcher */}
+      <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
+            Fields
+          </h2>
+          <span className="text-[10px] text-gray-400">{pageFields.length} / {fields.length} field{fields.length !== 1 ? 's' : ''}</span>
+        </div>
+        {templateMode === 'comparison' && (
+          <div className="flex mt-2 rounded-lg overflow-hidden border border-gray-200">
+            <button
+              onClick={() => setComparisonTab('fields')}
+              className={`flex-1 py-1 text-[10px] font-medium transition-colors ${
+                comparisonTab === 'fields'
+                  ? 'bg-gray-700 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              Fields
+            </button>
+            <button
+              onClick={() => setComparisonTab('connections')}
+              className={`flex-1 py-1 text-[10px] font-medium transition-colors ${
+                comparisonTab === 'connections'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              Connections
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Fields list */}
+      {/* Fields list — connections tab in comparison mode, or normal field list */}
+      {templateMode === 'comparison' && comparisonTab === 'connections' ? (
+        <ComparisonFieldsPanel />
+      ) : (
       <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-        {fields.length === 0 ? (
+        {pageFields.length === 0 ? (
           <p className="text-xs text-gray-400 text-center py-4">
             {isTestingMode
-              ? 'This template has no fields.'
-              : 'No fields yet. Draw on the PDF to add fields.'}
+              ? 'No fields on this page.'
+              : fields.length === 0
+                ? 'No fields yet. Draw on the PDF to add fields.'
+                : 'No fields on this page.'}
           </p>
         ) : (
-          fields.map((field, i) => (
+          pageFields.map((field, i) => (
             <div
               key={field.id}
               className={`group/field rounded-lg text-xs transition-colors cursor-pointer ${
@@ -347,7 +430,6 @@ export default function TemplatePanel() {
                 </div>
                 {canEditFields && (
                   <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-                    {/* Edit (rename) button — visible on hover */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -374,11 +456,9 @@ export default function TemplatePanel() {
                   </div>
                 )}
               </div>
-              {/* Chain + Rules editor — only in create/edit mode */}
               {canEditFields && expandedFieldId === field.id && (
                 <div className="px-3 pb-2 border-t border-gray-100 pt-1.5">
                   <ChainEditor field={field} />
-                  {/* Legacy rules editor — show when no chain steps exist */}
                   {(!field.chain || field.chain.length === 0) && (
                     <RulesEditor field={field} />
                   )}
@@ -388,6 +468,7 @@ export default function TemplatePanel() {
           ))
         )}
       </div>
+      )}
 
       {/* Bottom actions */}
       {isTestingMode ? (

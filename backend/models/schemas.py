@@ -90,6 +90,8 @@ class Field(BaseModel):
     value_format: Literal["currency", "number", "integer", "date", "string"] | None = None
     # Configurable chain pipeline (replaces hardcoded logic when non-empty)
     chain: list[ChainStep] = []
+    # Comparison mode: which PDF this field belongs to
+    source: Literal["a", "b"] = "a"
 
 
 class DetectFormatRequest(BaseModel):
@@ -100,6 +102,7 @@ class DetectFormatRequest(BaseModel):
 class TemplateCreate(BaseModel):
     name: str
     fields: list[Field]
+    mode: Literal["single", "comparison"] = "single"
 
 
 class Template(BaseModel):
@@ -107,16 +110,19 @@ class Template(BaseModel):
     name: str
     fields: list[Field]
     created_at: datetime
+    mode: Literal["single", "comparison"] = "single"
 
 
 class TestRequest(BaseModel):
     pdf_id: str
     fields: list[Field]
+    pdf_id_b: str | None = None
 
 
 class ExtractionRequest(BaseModel):
     pdf_id: str
     template_id: str
+    pdf_id_b: str | None = None
 
 
 class FieldResult(BaseModel):
@@ -124,6 +130,7 @@ class FieldResult(BaseModel):
     field_type: Literal["static", "dynamic"]
     value: str
     status: Literal["ok", "anchor_mismatch", "anchor_not_found", "anchor_shifted", "anchor_relocated", "empty", "rule_failed"]
+    source: Literal["a", "b"] = "a"
     # For dynamic fields:
     expected_anchor: str | None = None
     actual_anchor: str | None = None
@@ -143,3 +150,4 @@ class ExtractionResponse(BaseModel):
     template_id: str
     results: list[FieldResult]
     needs_review: bool   # True if any field has non-ok status
+    pdf_id_b: str | None = None

@@ -21,7 +21,14 @@ async def extract_data(request: ExtractionRequest):
     if not pdf_path.exists():
         raise HTTPException(status_code=404, detail="PDF not found.")
 
-    results = extract_all_fields(str(pdf_path), template.fields)
+    pdf_path_b = None
+    if request.pdf_id_b:
+        pdf_path_b_resolved = UPLOADS_DIR / f"{request.pdf_id_b}.pdf"
+        if not pdf_path_b_resolved.exists():
+            raise HTTPException(status_code=404, detail="PDF B not found.")
+        pdf_path_b = str(pdf_path_b_resolved)
+
+    results = extract_all_fields(str(pdf_path), template.fields, pdf_path_b)
     needs_review = any(r.status not in ("ok",) for r in results)
 
     return ExtractionResponse(
@@ -29,6 +36,7 @@ async def extract_data(request: ExtractionRequest):
         template_id=request.template_id,
         results=results,
         needs_review=needs_review,
+        pdf_id_b=request.pdf_id_b,
     )
 
 
@@ -38,7 +46,14 @@ async def test_extraction(request: TestRequest):
     if not pdf_path.exists():
         raise HTTPException(status_code=404, detail="PDF not found.")
 
-    results = extract_all_fields(str(pdf_path), request.fields)
+    pdf_path_b = None
+    if request.pdf_id_b:
+        pdf_path_b_resolved = UPLOADS_DIR / f"{request.pdf_id_b}.pdf"
+        if not pdf_path_b_resolved.exists():
+            raise HTTPException(status_code=404, detail="PDF B not found.")
+        pdf_path_b = str(pdf_path_b_resolved)
+
+    results = extract_all_fields(str(pdf_path), request.fields, pdf_path_b)
     needs_review = any(r.status not in ("ok",) for r in results)
 
     return ExtractionResponse(
@@ -46,4 +61,5 @@ async def test_extraction(request: TestRequest):
         template_id="test",
         results=results,
         needs_review=needs_review,
+        pdf_id_b=request.pdf_id_b,
     )

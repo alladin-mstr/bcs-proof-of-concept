@@ -24,6 +24,17 @@ interface AppState {
   // Drawing a search region for a chain step
   drawingRegionForStepId: { fieldId: string; stepId: string } | null;
 
+  // Whether field drawing/editing is enabled (set by TemplatePanel based on mode)
+  canDrawFields: boolean;
+
+  // Comparison mode state
+  pdfIdB: string | null;
+  pdfFilenameB: string | null;
+  pageCountB: number;
+  currentPageB: number;
+  activeSource: "a" | "b";
+  templateMode: "single" | "comparison";
+
   setPdf: (pdfId: string, pageCount: number, filename?: string) => void;
   clearPdf: () => void;
   addField: (field: Field) => void;
@@ -51,6 +62,16 @@ interface AppState {
   setFieldChain: (fieldId: string, chain: ChainStep[]) => void;
   setDrawingRegionForStepId: (info: { fieldId: string; stepId: string } | null) => void;
   updateFieldRegion: (fieldId: string, regionType: 'value' | 'anchor', region: Region) => void;
+
+  updateRule: (fieldId: string, ruleIndex: number, updates: Partial<Rule>) => void;
+  setCanDrawFields: (can: boolean) => void;
+
+  // Comparison mode actions
+  setPdfB: (pdfId: string, pageCount: number, filename?: string) => void;
+  clearPdfB: () => void;
+  setActiveSource: (source: "a" | "b") => void;
+  setTemplateMode: (mode: "single" | "comparison") => void;
+  setCurrentPageB: (page: number) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -68,14 +89,29 @@ export const useAppStore = create<AppState>((set) => ({
   chainEditFieldId: null,
   drawingRegionForStepId: null,
 
+  canDrawFields: true,
+
+  // Comparison mode defaults
+  pdfIdB: null,
+  pdfFilenameB: null,
+  pageCountB: 0,
+  currentPageB: 1,
+  activeSource: "a",
+  templateMode: "single",
+
   setPdf: (pdfId, pageCount, filename) =>
-    set({ pdfId, pdfFilename: filename ?? null, pageCount, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null }),
+    set({ pdfId, pdfFilename: filename ?? null, pageCount, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null, pdfIdB: null, pdfFilenameB: null, pageCountB: 0, currentPageB: 1, activeSource: "a" }),
 
   clearPdf: () =>
-    set({ pdfId: null, pdfFilename: null, pageCount: 0, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null }),
+    set({ pdfId: null, pdfFilename: null, pageCount: 0, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null, pdfIdB: null, pdfFilenameB: null, pageCountB: 0, currentPageB: 1, activeSource: "a" }),
 
   addField: (field) =>
-    set((state) => ({ fields: [...state.fields, field] })),
+    set((state) => ({
+      fields: [...state.fields, {
+        ...field,
+        source: field.source ?? state.activeSource,
+      }],
+    })),
 
   removeField: (id) =>
     set((state) => ({
@@ -89,12 +125,12 @@ export const useAppStore = create<AppState>((set) => ({
   setTemplates: (templates) => set({ templates }),
 
   loadTemplate: (template) =>
-    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null }),
+    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, templateMode: template.mode ?? "single" }),
 
   setExtractionResults: (results) => set({ extractionResults: results }),
 
   editTemplate: (template) =>
-    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, extractionResults: null, editingFieldId: null, chainEditFieldId: null }),
+    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, extractionResults: null, editingFieldId: null, chainEditFieldId: null, templateMode: template.mode ?? "single" }),
 
   setDrawMode: (mode) => set({ drawMode: mode, pendingAnchor: null }),
 
@@ -195,4 +231,28 @@ export const useAppStore = create<AppState>((set) => ({
         return f;
       }),
     })),
+
+  updateRule: (fieldId, ruleIndex, updates) =>
+    set((state) => ({
+      fields: state.fields.map((f) =>
+        f.id === fieldId
+          ? { ...f, rules: f.rules.map((r, i) => i === ruleIndex ? { ...r, ...updates } : r) }
+          : f
+      ),
+    })),
+
+  setCanDrawFields: (can) => set({ canDrawFields: can }),
+
+  // Comparison mode actions
+  setPdfB: (pdfId, pageCount, filename) =>
+    set({ pdfIdB: pdfId, pdfFilenameB: filename ?? null, pageCountB: pageCount, currentPageB: 1 }),
+
+  clearPdfB: () =>
+    set({ pdfIdB: null, pdfFilenameB: null, pageCountB: 0, currentPageB: 1 }),
+
+  setActiveSource: (source) => set({ activeSource: source }),
+
+  setTemplateMode: (mode) => set({ templateMode: mode }),
+
+  setCurrentPageB: (page) => set({ currentPageB: page }),
 }));

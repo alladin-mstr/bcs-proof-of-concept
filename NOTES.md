@@ -17,9 +17,13 @@ Initial approach used Claude AI to validate/clean extracted text. Removed becaus
 
 No AI. Pure algorithmic extraction with two field types and a validation rules engine.
 
-### Phase 3: Configurable Chain System (current)
+### Phase 3: Configurable Chain System
 
 Replaced hardcoded anchor fallback logic with per-field configurable chain pipelines. Each field defines its own search → value → validate strategy instead of using a one-size-fits-all approach. Also added PDF library for managing uploaded files.
+
+### Phase 4: Two-File Comparison Mode (current)
+
+Added comparison mode where a template works with two PDFs side by side (e.g., order receipt vs invoice). Fields can be drawn on either file, and `compare_field` rules validate values across documents. Uses React Flow for a pannable/zoomable side-by-side canvas.
 
 ---
 
@@ -227,13 +231,15 @@ bcs/
         ├── App.tsx                  # Main layout, header, files dropdown, upload modal, auto-load first PDF
         ├── components/
         │   ├── PdfUploader.tsx       # Standalone upload component (used as fallback, not primary)
-        │   ├── PdfViewer.tsx         # react-pdf + toolbar (zoom/pan/hide markers)
+        │   ├── PdfViewer.tsx         # react-pdf + toolbar (zoom/pan/hide markers) — single mode
+        │   ├── ComparisonCanvas.tsx  # React Flow canvas with two PdfNode nodes — comparison mode
+        │   ├── ComparisonFieldsPanel.tsx # Two-column drag-to-connect field linking UI
         │   ├── BboxCanvas.tsx        # SVG overlay: fields, ghost boxes, shift arrows, chain edit, drag-to-move
-        │   ├── TemplatePanel.tsx     # Sidebar: 3 modes, fields, rules/chain, templates
+        │   ├── TemplatePanel.tsx     # Sidebar: 3 modes, fields/connections tabs, rules/chain, templates
         │   ├── ExtractionResults.tsx # Right panel: test results + chain traces
         │   ├── ChainEditor.tsx       # Chain pipeline editor (steps, config, reorder, region draw)
         │   └── RulesEditor.tsx       # Legacy inline rule editor per field
-        ├── store/appStore.ts         # Zustand: fields, templates, results, drawing, chain edit, drag state
+        ├── store/appStore.ts         # Zustand: fields, templates, results, drawing, chain edit, drag state, comparison mode
         ├── hooks/useBboxDrawing.ts   # Mouse drag → rectangle
         ├── api/client.ts             # All backend API calls (upload, list, delete PDFs + templates + extract)
         ├── types/index.ts            # Region, Field, ChainStep, StepTrace, Rule, FieldResult, etc.
@@ -327,6 +333,25 @@ The `region_search` chain step allows users to draw a search region directly on 
 
 When in region drawing mode, an amber banner appears on the PDF and the next drawn rectangle is captured as the search region (not as a new field).
 
+### Two-File Comparison Mode
+
+Templates can operate in `"single"` (default) or `"comparison"` mode. Comparison mode adds:
+
+**Backend:**
+- `Field.source: "a" | "b"` — which PDF the field belongs to (default `"a"`)
+- `Template.mode: "single" | "comparison"` — persisted with the template
+- `extract_all_fields(pdf_path, fields, pdf_path_b=None)` — routes each field to correct PDF by `field.source`
+- `compare_field` rule: `equals`/`not_equals` do string comparison (dates, text work). Ordering operators try numeric, fall back to string.
+
+**Frontend:**
+- `ComparisonCanvas.tsx` — React Flow canvas with two `PdfNode` custom nodes. Each node: file selector, page nav, PDF render + BboxCanvas overlay. Nodes are draggable.
+- `ComparisonFieldsPanel.tsx` — Two-column (A left, B right) with SVG connection lines. Drag from connect dot to create `compare_field` rules. Click connection to edit operator or delete.
+- `TemplatePanel` — "Single / Comparison" mode toggle. "Fields / Connections" tab switcher in comparison mode. Fields tab: full field list with chains/rules. Connections tab: the two-column linking UI.
+- `BboxCanvas` — `source` prop filters fields per PDF. Results keyed by `source:label` to handle same-named fields.
+- `appStore` — PDF B state (`pdfIdB`, `pageCountB`, etc.), `activeSource`, `templateMode`, `canDrawFields`.
+
+**Backward compatibility:** All new fields have defaults. Existing single-file templates load without issues.
+
 ### Draggable Field Boxes
 
 Anchor and value boxes can be repositioned by dragging them directly on the PDF in create/edit mode. Hover on a box → cursor changes to move → drag to new position → release to commit. The box shows an indigo dashed border while being dragged. This eliminates the need to delete and redraw fields when the position is slightly off.
@@ -363,3 +388,7 @@ Auto-detecting format at template creation time (not at test time) means the tem
 8. **Circular import between chain_engine and extraction_service** — Both imported from each other. Fixed by using lazy imports (`_validate_rule` wrapper with deferred `from services.extraction_service import validate_rule`) and duplicating `_anchor_matches` locally in chain_engine.
 9. **useBboxDrawing handlers referenced before definition** — Drag handler callbacks used `handlers` from `useBboxDrawing` before the hook was called. Fixed by moving `useBboxDrawing` call above the drag handler definitions.
 10. **Drag-to-move also creates new field** — Race condition: `startDrag` calls `setDrag()` but React batches the state update, so `onSvgMouseDown` still sees `drag` as `null` and starts the drawing handler too. Fixed with a synchronous `dragStartedRef` (useRef) checked in `onSvgMouseDown` before delegating to the drawing handler.
+11. **Same-named fields across PDFs show wrong result color** — `resultByLabel[r.label]` overwrites when two fields share a label (e.g., "total" on PDF A and "total" on PDF B). Fixed by keying results as `source:label` (e.g., `"a:total"`, `"b:total"`).
+12. **compare_field fails on non-numeric values** — `compare_field` rule forced `parse_currency()` on all values, failing on dates like "March 18, 2026". Fixed: `equals`/`not_equals` now do direct string comparison. Ordering operators try numeric first, fall back to string lexicographic.
+13. **ComparisonFieldsPanel misses same-named cross-PDF connections** — `fields.find(f => f.label === label)` returned the first match (same source), skipping the cross-PDF target. Fixed by preferring fields on the opposite source.
+14. **ComparisonFieldsPanel only checked legacy rules, not chain steps** — Chain-based `compare_field` steps weren't shown as connections. Fixed by scanning both `field.rules` and `field.chain` with deduplication.

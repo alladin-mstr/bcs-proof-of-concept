@@ -35,9 +35,10 @@ export function getPdfUrl(pdfId: string): string {
 
 export async function createTemplate(
   name: string,
-  fields: Field[]
+  fields: Field[],
+  mode: "single" | "comparison" = "single"
 ): Promise<Template> {
-  const response = await api.post('/templates', { name, fields });
+  const response = await api.post('/templates', { name, fields, mode });
   return response.data;
 }
 
@@ -54,9 +55,10 @@ export async function getTemplate(templateId: string): Promise<Template> {
 export async function updateTemplate(
   templateId: string,
   name: string,
-  fields: Field[]
+  fields: Field[],
+  mode: "single" | "comparison" = "single"
 ): Promise<Template> {
-  const response = await api.put(`/templates/${templateId}`, { name, fields });
+  const response = await api.put(`/templates/${templateId}`, { name, fields, mode });
   return response.data;
 }
 
@@ -77,7 +79,9 @@ export async function detectFormat(pdfId: string, region: Region): Promise<{ tex
 }
 
 // Test extraction with current fields (no saved template needed)
-export async function testExtraction(pdfId: string, fields: Field[]): Promise<ExtractionResponse> {
-  const response = await api.post('/test', { pdf_id: pdfId, fields });
+export async function testExtraction(pdfId: string, fields: Field[], pdfIdB?: string): Promise<ExtractionResponse> {
+  const body: Record<string, unknown> = { pdf_id: pdfId, fields };
+  if (pdfIdB) body.pdf_id_b = pdfIdB;
+  const response = await api.post('/test', body);
   return response.data;
 }

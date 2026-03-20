@@ -19,6 +19,7 @@ def save_template(template_id: str, data: TemplateCreate) -> Template:
         name=data.name,
         fields=data.fields,
         created_at=datetime.now(timezone.utc),
+        mode=data.mode,
     )
 
     _template_path(template_id).write_text(
@@ -56,6 +57,7 @@ def update_template(template_id: str, data: TemplateCreate) -> Template | None:
         name=data.name,
         fields=data.fields,
         created_at=existing.get("created_at", datetime.now(timezone.utc).isoformat()),
+        mode=data.mode,
     )
 
     path.write_text(template.model_dump_json(indent=2), encoding="utf-8")

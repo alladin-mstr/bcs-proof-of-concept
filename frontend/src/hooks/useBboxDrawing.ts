@@ -25,8 +25,11 @@ export function useBboxDrawing(
     (e: React.MouseEvent<SVGSVGElement>) => {
       const svg = e.currentTarget;
       const rect = svg.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      // Account for CSS transforms (e.g. React Flow zoom) that scale the element
+      const scaleX = svg.clientWidth / rect.width;
+      const scaleY = svg.clientHeight / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
       startPoint.current = { x, y };
       setIsDrawing(true);
       setCurrentRect({ x, y, width: 0, height: 0 });
@@ -39,8 +42,10 @@ export function useBboxDrawing(
       if (!isDrawing || !startPoint.current) return;
       const svg = e.currentTarget;
       const rect = svg.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
+      const scaleX = svg.clientWidth / rect.width;
+      const scaleY = svg.clientHeight / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
       const sx = startPoint.current.x;
       const sy = startPoint.current.y;
       setCurrentRect({

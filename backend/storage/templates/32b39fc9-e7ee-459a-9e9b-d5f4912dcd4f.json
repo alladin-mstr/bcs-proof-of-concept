@@ -30,7 +30,8 @@
         }
       ],
       "value_format": null,
-      "chain": []
+      "chain": [],
+      "source": "a"
     },
     {
       "id": "21a9f19b-a95b-4d7a-b231-75597689d0bf",
@@ -60,7 +61,8 @@
         }
       ],
       "value_format": null,
-      "chain": []
+      "chain": [],
+      "source": "a"
     },
     {
       "id": "3a8a6820-0c35-413f-9fb8-d11d022a969e",
@@ -105,7 +107,7 @@
           "id": "efde5d1b-8725-4d49-8f6e-829f5bb21524",
           "category": "search",
           "type": "vertical_slide",
-          "slide_tolerance": 0.1,
+          "slide_tolerance": 0.11,
           "search_region": null,
           "search_direction": null,
           "expected_value": null,
@@ -169,7 +171,8 @@
           "compare_field_label": null,
           "compare_operator": null
         }
-      ]
+      ],
+      "source": "a"
     },
     {
       "id": "f27c7af7-3d4f-48f8-91ca-5954fc00a252",
@@ -199,7 +202,8 @@
         }
       ],
       "value_format": null,
-      "chain": []
+      "chain": [],
+      "source": "a"
     },
     {
       "id": "2d6d8a9c-d7ce-46e3-be5d-072e075358c4",
@@ -233,7 +237,8 @@
         }
       ],
       "value_format": null,
-      "chain": []
+      "chain": [],
+      "source": "a"
     },
     {
       "id": "b53fd549-f68b-4d12-9e56-c20ebcae9f7e",
@@ -342,8 +347,103 @@
           "compare_field_label": null,
           "compare_operator": null
         }
-      ]
+      ],
+      "source": "a"
+    },
+    {
+      "id": "76f7e9b5-b5b4-4fdf-ae3c-496b66e2fb0c",
+      "label": "deduction",
+      "type": "dynamic",
+      "value_region": {
+        "page": 1,
+        "x": 0.6781045751633987,
+        "y": 0.7727272727272727,
+        "width": 0.1323529411764706,
+        "height": 0.020202020202020204
+      },
+      "anchor_region": {
+        "page": 1,
+        "x": 0.12254901960784313,
+        "y": 0.773989898989899,
+        "width": 0.1830065359477124,
+        "height": 0.02904040404040404
+      },
+      "expected_anchor_text": "deduction",
+      "rules": [],
+      "value_format": "currency",
+      "chain": [
+        {
+          "id": "d2009099-62bf-4105-95ed-0330875c6241",
+          "category": "search",
+          "type": "exact_position",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "5241e29e-c3a3-4382-81be-cb710390674c",
+          "category": "search",
+          "type": "vertical_slide",
+          "slide_tolerance": 0.3,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "94fbfeed-47a8-4e8d-8103-ea99bc1840b4",
+          "category": "value",
+          "type": "offset_value",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "13fb975e-c879-46cd-ae93-a1940725a7a0",
+          "category": "value",
+          "type": "adjacent_scan",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": "right",
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ],
+      "source": "a"
     }
   ],
-  "created_at": "2026-03-19T15:52:10.449502Z"
+  "created_at": "2026-03-19T15:52:10.449502Z",
+  "mode": "single"
 }

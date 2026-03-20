@@ -25,6 +25,10 @@ const COLORS = {
   resultShifted: { fill: 'rgba(59,130,246,0.15)', stroke: 'rgb(59,130,246)' },
   resultRelocated: { fill: 'rgba(245,158,11,0.15)', stroke: 'rgb(245,158,11)' },
   resultEmpty: { fill: 'rgba(156,163,175,0.12)', stroke: 'rgb(156,163,175)' },
+  // Source B colors (emerald tones)
+  staticValueB: { fill: 'rgba(16,185,129,0.25)', stroke: 'rgb(16,185,129)' },
+  dynamicAnchorB: { fill: 'rgba(245,158,11,0.25)', stroke: 'rgb(217,119,6)' },
+  dynamicValueB: { fill: 'rgba(16,185,129,0.25)', stroke: 'rgb(16,185,129)' },
 };
 
 function getResultColor(status: FieldResult['status']) {
@@ -37,7 +41,7 @@ function getResultColor(status: FieldResult['status']) {
   }
 }
 
-interface Props { pageWidth: number; pageHeight: number }
+interface Props { pageWidth: number; pageHeight: number; source?: "a" | "b" }
 
 function pixelRectToRegion(rect: { x: number; y: number; width: number; height: number }, page: number, pw: number, ph: number): Region {
   const tl = pixelToNormalized(rect.x, rect.y, pw, ph);
@@ -51,8 +55,8 @@ function regionCenter(region: Region, pw: number, ph: number) {
   return { cx: p.x + d.x / 2, cy: p.y + d.y / 2 };
 }
 
-export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
-  const currentPage = useAppStore((s) => s.currentPage);
+export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
+  const currentPage = useAppStore((s) => source === 'b' ? s.currentPageB : s.currentPage);
   const fields = useAppStore((s) => s.fields);
   const addField = useAppStore((s) => s.addField);
   const removeField = useAppStore((s) => s.removeField);
@@ -65,11 +69,11 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
   const setEditingFieldId = useAppStore((s) => s.setEditingFieldId);
   const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
   const chainEditFieldId = useAppStore((s) => s.chainEditFieldId);
+  const setChainEditFieldId = useAppStore((s) => s.setChainEditFieldId);
   const drawingRegionForStepId = useAppStore((s) => s.drawingRegionForStepId);
   const setDrawingRegionForStepId = useAppStore((s) => s.setDrawingRegionForStepId);
   const updateChainStep = useAppStore((s) => s.updateChainStep);
   const updateFieldRegion = useAppStore((s) => s.updateFieldRegion);
-  const activeTemplateId = useAppStore((s) => s.activeTemplateId);
 
   // Drag state for moving existing boxes
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -77,30 +81,61 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
   const dragStartedRef = useRef(false);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // Escape key exits field edit mode
+  // Escape key exits field edit mode or chain edit mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && editingFieldId) {
-        setEditingFieldId(null);
+      if (e.key === 'Escape') {
+        if (editingFieldId) setEditingFieldId(null);
+        if (chainEditFieldId) setChainEditFieldId(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editingFieldId, setEditingFieldId]);
+  }, [editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId]);
 
-  // Are we in a mode that allows editing fields?
-  const isTestingMode = activeTemplateId !== null && !useAppStore.getState().extractionResults;
-  const canEdit = !isTestingMode;
+  // Click outside the SVG canvas also exits field/chain edit mode
+  useEffect(() => {
+    if (!editingFieldId && !chainEditFieldId) return;
+    const handleGlobalMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (svgRef.current && !svgRef.current.contains(target)) {
+        if (editingFieldId) setEditingFieldId(null);
+        // Don't exit chain edit when clicking inside the chain editor panel
+        if (chainEditFieldId && !(target instanceof HTMLElement && target.closest('[data-chain-editor]'))) {
+          setChainEditFieldId(null);
+        }
+      }
+    };
+    window.addEventListener('mousedown', handleGlobalMouseDown);
+    return () => window.removeEventListener('mousedown', handleGlobalMouseDown);
+  }, [editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId]);
+
+  // Whether field drawing/editing is allowed (set by TemplatePanel)
+  const canEdit = useAppStore((s) => s.canDrawFields);
 
   const currentPageFields = fields.filter(
-    (f) => f.value_region.page === currentPage || (f.anchor_region && f.anchor_region.page === currentPage)
+    (f) => {
+      const onPage = f.value_region.page === currentPage || (f.anchor_region && f.anchor_region.page === currentPage);
+      if (!onPage) return false;
+      // When source prop is provided (comparison mode), only show fields for this source
+      if (source !== undefined) return (f.source ?? "a") === source;
+      return true;
+    }
   );
 
-  const resultByLabel: Record<string, FieldResult> = {};
-  if (extractionResults) for (const r of extractionResults) resultByLabel[r.label] = r;
+  // Key results by label+source to handle same-named fields across PDFs
+  const resultByKey: Record<string, FieldResult> = {};
+  if (extractionResults) {
+    for (const r of extractionResults) {
+      resultByKey[`${r.source ?? 'a'}:${r.label}`] = r;
+      // Also store by label alone as fallback for single-mode
+      if (!resultByKey[r.label]) resultByKey[r.label] = r;
+    }
+  }
 
   const onDrawComplete = useCallback(
     async (rect: { x: number; y: number; width: number; height: number }) => {
+      if (!canEdit) return;
       const region = pixelRectToRegion(rect, currentPage, pageWidth, pageHeight);
 
       // If drawing a search region for a chain step, capture it there
@@ -156,7 +191,7 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
         setPendingAnchor(null);
       }
     },
-    [addField, currentPage, pageWidth, pageHeight, drawMode, pendingAnchor, setPendingAnchor, pdfId, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId]
+    [canEdit, addField, currentPage, pageWidth, pageHeight, drawMode, pendingAnchor, setPendingAnchor, pdfId, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId]
   );
 
   const { currentRect, handlers } = useBboxDrawing(onDrawComplete);
@@ -168,6 +203,8 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
+    const scaleX = svg.clientWidth / rect.width;
+    const scaleY = svg.clientHeight / rect.height;
     const field = fields.find((f) => f.id === fieldId);
     if (!field) return;
     const origRegion = regionType === 'anchor' ? field.anchor_region : field.value_region;
@@ -176,8 +213,8 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
     setDrag({
       fieldId,
       regionType,
-      startMouseX: e.clientX - rect.left,
-      startMouseY: e.clientY - rect.top,
+      startMouseX: (e.clientX - rect.left) * scaleX,
+      startMouseY: (e.clientY - rect.top) * scaleY,
       origRegion,
     });
     setDragPreview(null);
@@ -187,8 +224,10 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
     if (drag) {
       const svg = e.currentTarget;
       const rect = svg.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
+      const scaleX = svg.clientWidth / rect.width;
+      const scaleY = svg.clientHeight / rect.height;
+      const mx = (e.clientX - rect.left) * scaleX;
+      const my = (e.clientY - rect.top) * scaleY;
       setDragPreview({ x: mx - drag.startMouseX, y: my - drag.startMouseY });
     }
     handlers.onMouseMove(e);
@@ -225,12 +264,15 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
       dragStartedRef.current = false;
       return;
     }
-    // Click on empty canvas exits field edit mode
-    if (editingFieldId && e.target === svgRef.current) {
+    // Click anywhere on the canvas (outside editing field's own handlers) exits edit modes
+    if (editingFieldId) {
       setEditingFieldId(null);
     }
-    if (!drag) handlers.onMouseDown(e);
-  }, [drag, handlers, editingFieldId, setEditingFieldId]);
+    if (chainEditFieldId) {
+      setChainEditFieldId(null);
+    }
+    if (!drag && canEdit) handlers.onMouseDown(e);
+  }, [drag, handlers, editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId]);
   const previewColor = drawingRegionForStepId
     ? { fill: 'rgba(245,158,11,0.1)', stroke: 'rgb(245,158,11)' }
     : drawMode === 'dynamic' && !pendingAnchor
@@ -238,7 +280,7 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
       : { fill: 'rgba(59,130,246,0.15)', stroke: 'rgb(59,130,246)' };
 
   return (
-    <svg ref={svgRef} className="absolute top-0 left-0 w-full h-full" style={{ cursor: drag ? 'grabbing' : 'crosshair', zIndex: 10 }}
+    <svg ref={svgRef} className="absolute top-0 left-0 w-full h-full" style={{ cursor: drag ? 'grabbing' : canEdit ? 'crosshair' : 'default', zIndex: 10 }}
       onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp}>
       <defs>
         <style>{`
@@ -264,7 +306,7 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
           <g key={field.id}
             style={{ display: isHidden ? 'none' : undefined }}>
             <FieldOverlay field={field} pw={pageWidth} ph={pageHeight}
-              currentPage={currentPage} onRemove={() => removeField(field.id)} result={resultByLabel[field.label] ?? null}
+              currentPage={currentPage} onRemove={() => removeField(field.id)} result={resultByKey[`${field.source ?? 'a'}:${field.label}`] ?? resultByKey[field.label] ?? null}
               onStartDrag={canEdit ? startDrag : undefined}
               isEditing={isFieldEditing}
               onSelect={canEdit ? () => setEditingFieldId(field.id) : undefined}

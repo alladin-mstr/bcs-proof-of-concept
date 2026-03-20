@@ -280,7 +280,7 @@ export default function ChainEditor({ field }: Props) {
   };
 
   return (
-    <div className="mt-1">
+    <div className="mt-1" data-chain-editor>
       {/* Chain toggle button */}
       <div className="flex items-center gap-1.5 mb-1.5">
         <button

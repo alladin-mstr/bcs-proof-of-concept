@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAppStore } from './store/appStore';
 import { listPdfs, deletePdf, uploadPdf, type PdfInfo } from './api/client';
 import PdfViewer from './components/PdfViewer';
+import ComparisonCanvas from './components/ComparisonCanvas';
 import TemplatePanel from './components/TemplatePanel';
 import ExtractionResults from './components/ExtractionResults';
 
@@ -11,6 +12,7 @@ function App() {
   const setPdf = useAppStore((s) => s.setPdf);
   const extractionResults = useAppStore((s) => s.extractionResults);
   const setExtractionResults = useAppStore((s) => s.setExtractionResults);
+  const templateMode = useAppStore((s) => s.templateMode);
 
   const [showFiles, setShowFiles] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -142,8 +144,10 @@ function App() {
         {pdfId && <TemplatePanel />}
 
         {/* Main area */}
-        <main className="flex-1 overflow-y-auto p-6">
-          {pdfId ? (
+        <main className={`flex-1 ${templateMode === 'comparison' ? 'overflow-hidden' : 'overflow-y-auto p-6'} min-w-0`}>
+          {pdfId && templateMode === 'comparison' ? (
+            <ComparisonCanvas />
+          ) : pdfId ? (
             <PdfViewer />
           ) : noPdfs ? (
             <div className="flex flex-col items-center justify-center h-full text-center">

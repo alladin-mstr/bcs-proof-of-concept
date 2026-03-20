@@ -256,28 +256,49 @@ def validate_rule(rule: Rule, value: str, all_values: dict[str, str] | None = No
             )
 
         other_raw = all_values[other_label]
-        this_num = parse_currency(value.strip())
-        other_num = parse_currency(other_raw.strip())
+        this_val = value.strip()
+        other_val = other_raw.strip()
+        op = rule.compare_operator
+        op_label = OPERATOR_LABELS.get(op, op)
 
-        if this_num is None:
-            return RuleResult(
-                rule_type="compare_field",
-                passed=False,
-                message=f"Cannot parse '{value.strip()}' as a number for comparison",
-            )
-        if other_num is None:
-            return RuleResult(
-                rule_type="compare_field",
-                passed=False,
-                message=f"Cannot parse '{other_raw.strip()}' (from '{other_label}') as a number",
-            )
+        # For equals/not_equals, compare as strings first (handles dates, text, etc.)
+        if op in ("equals", "not_equals"):
+            if op == "equals":
+                passed = this_val == other_val
+            else:
+                passed = this_val != other_val
+            if passed:
+                msg = f"'{this_val}' {op_label} '{other_val}' ({other_label})"
+            else:
+                msg = f"'{this_val}' is not {op_label} '{other_val}' ({other_label})"
+            return RuleResult(rule_type="compare_field", passed=passed, message=msg)
 
-        op_label = OPERATOR_LABELS.get(rule.compare_operator, rule.compare_operator)
-        passed = compare_values(this_num, other_num, rule.compare_operator)
-        if passed:
-            msg = f"{this_num} {op_label} {other_num} ({other_label})"
+        # For ordering operators, try numeric comparison; fall back to string comparison
+        this_num = parse_currency(this_val)
+        other_num = parse_currency(other_val)
+
+        if this_num is not None and other_num is not None:
+            passed = compare_values(this_num, other_num, op)
+            if passed:
+                msg = f"{this_num} {op_label} {other_num} ({other_label})"
+            else:
+                msg = f"{this_num} is not {op_label} {other_num} ({other_label})"
         else:
-            msg = f"{this_num} is not {op_label} {other_num} ({other_label})"
+            # String comparison for ordering
+            if op == "less_than":
+                passed = this_val < other_val
+            elif op == "greater_than":
+                passed = this_val > other_val
+            elif op == "less_or_equal":
+                passed = this_val <= other_val
+            elif op == "greater_or_equal":
+                passed = this_val >= other_val
+            else:
+                passed = False
+            if passed:
+                msg = f"'{this_val}' {op_label} '{other_val}' ({other_label})"
+            else:
+                msg = f"'{this_val}' is not {op_label} '{other_val}' ({other_label})"
 
         return RuleResult(rule_type="compare_field", passed=passed, message=msg)
 
@@ -400,21 +421,26 @@ def resolve_dynamic_field(pdf_path: str, field: Field) -> dict:
     }
 
 
-def extract_all_fields(pdf_path: str, fields: list[Field]) -> list[FieldResult]:
+def extract_all_fields(pdf_path: str, fields: list[Field], pdf_path_b: str | None = None) -> list[FieldResult]:
     """Extract all fields from a PDF using two-pass approach.
 
     Pass 1: Extract raw values and check anchors for all fields.
             If field has a chain, use chain engine; otherwise use legacy logic.
     Pass 2: Validate rules (which may reference other fields' values).
+
+    pdf_path_b: optional second PDF path for comparison mode fields with source="b".
     """
     # --- Pass 1: Extract values and check anchors ---
     extracted: list[dict] = []
     all_values: dict[str, str] = {}
 
     for field in fields:
+        # Pick the correct PDF based on field source
+        field_pdf = pdf_path_b if (field.source == "b" and pdf_path_b) else pdf_path
+
         if field.chain:
             # Use chain engine (pass 1 - no cross-field values yet)
-            resolved = execute_field_chain(pdf_path, field)
+            resolved = execute_field_chain(field_pdf, field)
             all_values[field.label] = resolved["value"]
             extracted.append({
                 "field": field,
@@ -432,7 +458,7 @@ def extract_all_fields(pdf_path: str, fields: list[Field]) -> list[FieldResult]:
                 "uses_chain": True,
             })
         elif field.type == "static":
-            value = extract_text_from_region(pdf_path, field.value_region)
+            value = extract_text_from_region(field_pdf, field.value_region)
             all_values[field.label] = value
             extracted.append({
                 "field": field,
@@ -450,7 +476,7 @@ def extract_all_fields(pdf_path: str, fields: list[Field]) -> list[FieldResult]:
                 "uses_chain": False,
             })
         else:
-            resolved = resolve_dynamic_field(pdf_path, field)
+            resolved = resolve_dynamic_field(field_pdf, field)
             all_values[field.label] = resolved["value"]
             extracted.append({
                 "field": field,
@@ -476,6 +502,9 @@ def extract_all_fields(pdf_path: str, fields: list[Field]) -> list[FieldResult]:
         base_status: str = entry["base_status"]
         step_traces: list[StepTrace] = entry["step_traces"]
 
+        # Pick the correct PDF based on field source
+        field_pdf = pdf_path_b if (field.source == "b" and pdf_path_b) else pdf_path
+
         rule_results: list[RuleResult] = []
 
         if entry["uses_chain"]:
@@ -486,7 +515,7 @@ def extract_all_fields(pdf_path: str, fields: list[Field]) -> list[FieldResult]:
             )
             if has_compare:
                 # Re-execute the full chain with all_values
-                resolved = execute_field_chain(pdf_path, field, all_values)
+                resolved = execute_field_chain(field_pdf, field, all_values)
                 value = resolved["value"]
                 base_status = resolved["status"]
                 step_traces = resolved.get("step_traces", [])
@@ -502,6 +531,7 @@ def extract_all_fields(pdf_path: str, fields: list[Field]) -> list[FieldResult]:
             field_type=field.type,
             value=value,
             status=base_status,
+            source=field.source,
             expected_anchor=entry["expected_anchor"],
             actual_anchor=entry["actual_anchor"],
             anchor_shift=entry["anchor_shift"],
