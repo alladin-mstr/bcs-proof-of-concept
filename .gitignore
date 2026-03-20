@@ -1,3 +1,10 @@
 .env
 *.env
 backend/.env
+
+backend/storage/uploads/*
+backend/storage/templates/*
+
+backend/__pycache__/
+*.pyc
+*.pyo
