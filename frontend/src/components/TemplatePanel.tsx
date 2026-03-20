@@ -25,11 +25,16 @@ export default function TemplatePanel() {
   const setDrawMode = useAppStore((s) => s.setDrawMode);
   const pendingAnchor = useAppStore((s) => s.pendingAnchor);
   const setPendingAnchor = useAppStore((s) => s.setPendingAnchor);
+  const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
+  const editingFieldId = useAppStore((s) => s.editingFieldId);
+  const setEditingFieldId = useAppStore((s) => s.setEditingFieldId);
 
   const [saving, setSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [expandedFieldId, setExpandedFieldId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false); // editing an existing template
+  const [renamingFieldId, setRenamingFieldId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
 
   // Mode logic:
   // - Testing: activeTemplateId set + !isEditing
@@ -269,10 +274,12 @@ export default function TemplatePanel() {
           fields.map((field, i) => (
             <div
               key={field.id}
-              className={`rounded-lg text-xs transition-colors cursor-pointer ${
-                field.value_region.page === currentPage
-                  ? 'bg-blue-50 border border-blue-200'
-                  : 'bg-gray-50 border border-gray-100'
+              className={`group/field rounded-lg text-xs transition-colors cursor-pointer ${
+                editingFieldId === field.id
+                  ? 'bg-indigo-50 border border-indigo-300 ring-1 ring-indigo-200'
+                  : field.value_region.page === currentPage
+                    ? 'bg-blue-50 border border-blue-200'
+                    : 'bg-gray-50 border border-gray-100'
               }`}
               onClick={() => setExpandedFieldId(expandedFieldId === field.id ? null : field.id)}
             >
@@ -284,20 +291,46 @@ export default function TemplatePanel() {
                     }`}>
                       {field.type === 'static' ? 'S' : 'D'}
                     </span>
-                    <span className="font-medium text-gray-800 truncate">
-                      {i + 1}. {field.label}
-                    </span>
-                    {(field.chain?.length > 0) && (
+                    {renamingFieldId === field.id ? (
+                      <input
+                        autoFocus
+                        value={renameDraft}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onBlur={() => {
+                          if (renameDraft.trim() && renameDraft.trim() !== field.label) {
+                            updateFieldLabel(field.id, renameDraft.trim());
+                          }
+                          setRenamingFieldId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            if (renameDraft.trim() && renameDraft.trim() !== field.label) {
+                              updateFieldLabel(field.id, renameDraft.trim());
+                            }
+                            setRenamingFieldId(null);
+                          }
+                          if (e.key === 'Escape') setRenamingFieldId(null);
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="font-medium text-gray-800 bg-white border border-indigo-300 rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400 w-full text-xs"
+                      />
+                    ) : (
+                      <span className="font-medium text-gray-800 truncate">
+                        {i + 1}. {field.label}
+                      </span>
+                    )}
+                    {renamingFieldId !== field.id && (field.chain?.length > 0) && (
                       <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1 rounded" title="Chain steps">
                         ⛓ {field.chain.length}
                       </span>
                     )}
-                    {field.rules.length > 0 && !field.chain?.length && (
+                    {renamingFieldId !== field.id && field.rules.length > 0 && !field.chain?.length && (
                       <span className="text-[10px] bg-purple-100 text-purple-700 px-1 rounded">
                         {field.rules.length}
                       </span>
                     )}
-                    {field.value_format && field.value_format !== 'string' && (
+                    {renamingFieldId !== field.id && field.value_format && field.value_format !== 'string' && (
                       <span className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded">
                         {field.value_format}
                       </span>
@@ -313,15 +346,32 @@ export default function TemplatePanel() {
                   </div>
                 </div>
                 {canEditFields && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeField(field.id); }}
-                    className="ml-2 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
-                    title="Remove"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                    {/* Edit (rename) button — visible on hover */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingFieldId(field.id);
+                        setRenameDraft(field.label);
+                        setRenamingFieldId(field.id);
+                      }}
+                      className="text-gray-300 hover:text-indigo-500 transition-colors opacity-0 group-hover/field:opacity-100"
+                      title="Edit field"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeField(field.id); }}
+                      className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover/field:opacity-100"
+                      title="Remove"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 )}
               </div>
               {/* Chain + Rules editor — only in create/edit mode */}

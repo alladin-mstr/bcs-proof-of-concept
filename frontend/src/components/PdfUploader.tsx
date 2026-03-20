@@ -34,8 +34,9 @@ export default function PdfUploader() {
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      for (const file of Array.from(e.dataTransfer.files)) {
+        handleFile(file);
+      }
     },
     [handleFile]
   );
@@ -51,8 +52,9 @@ export default function PdfUploader() {
 
   const onFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleFile(file);
+      for (const file of Array.from(e.target.files ?? [])) {
+        handleFile(file);
+      }
     },
     [handleFile]
   );
@@ -98,6 +100,7 @@ export default function PdfUploader() {
           id="pdf-file-input"
           type="file"
           accept="application/pdf"
+          multiple
           className="hidden"
           onChange={onFileInput}
         />

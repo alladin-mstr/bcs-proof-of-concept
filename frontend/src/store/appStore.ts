@@ -16,6 +16,9 @@ interface AppState {
   // For dynamic fields: tracks the pending anchor while waiting for value draw
   pendingAnchor: { region: Region; expectedText: string } | null;
 
+  // Field edit mode (select a field to move/rename)
+  editingFieldId: string | null;
+
   // Chain edit mode
   chainEditFieldId: string | null;
   // Drawing a search region for a chain step
@@ -35,6 +38,10 @@ interface AppState {
   addRule: (fieldId: string, rule: Rule) => void;
   removeRule: (fieldId: string, ruleIndex: number) => void;
 
+  // Field edit
+  setEditingFieldId: (id: string | null) => void;
+  updateFieldLabel: (fieldId: string, label: string) => void;
+
   // Chain operations
   setChainEditFieldId: (id: string | null) => void;
   addChainStep: (fieldId: string, step: ChainStep, afterIndex?: number) => void;
@@ -43,6 +50,7 @@ interface AppState {
   reorderChainSteps: (fieldId: string, fromIndex: number, toIndex: number) => void;
   setFieldChain: (fieldId: string, chain: ChainStep[]) => void;
   setDrawingRegionForStepId: (info: { fieldId: string; stepId: string } | null) => void;
+  updateFieldRegion: (fieldId: string, regionType: 'value' | 'anchor', region: Region) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -56,14 +64,15 @@ export const useAppStore = create<AppState>((set) => ({
   activeTemplateId: null,
   drawMode: "static",
   pendingAnchor: null,
+  editingFieldId: null,
   chainEditFieldId: null,
   drawingRegionForStepId: null,
 
   setPdf: (pdfId, pageCount, filename) =>
-    set({ pdfId, pdfFilename: filename ?? null, pageCount, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, chainEditFieldId: null, drawingRegionForStepId: null }),
+    set({ pdfId, pdfFilename: filename ?? null, pageCount, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null }),
 
   clearPdf: () =>
-    set({ pdfId: null, pdfFilename: null, pageCount: 0, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, chainEditFieldId: null, drawingRegionForStepId: null }),
+    set({ pdfId: null, pdfFilename: null, pageCount: 0, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null }),
 
   addField: (field) =>
     set((state) => ({ fields: [...state.fields, field] })),
@@ -71,6 +80,7 @@ export const useAppStore = create<AppState>((set) => ({
   removeField: (id) =>
     set((state) => ({
       fields: state.fields.filter((f) => f.id !== id),
+      editingFieldId: state.editingFieldId === id ? null : state.editingFieldId,
       chainEditFieldId: state.chainEditFieldId === id ? null : state.chainEditFieldId,
     })),
 
@@ -79,12 +89,12 @@ export const useAppStore = create<AppState>((set) => ({
   setTemplates: (templates) => set({ templates }),
 
   loadTemplate: (template) =>
-    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, chainEditFieldId: null }),
+    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null }),
 
   setExtractionResults: (results) => set({ extractionResults: results }),
 
   editTemplate: (template) =>
-    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, extractionResults: null, chainEditFieldId: null }),
+    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, extractionResults: null, editingFieldId: null, chainEditFieldId: null }),
 
   setDrawMode: (mode) => set({ drawMode: mode, pendingAnchor: null }),
 
@@ -103,6 +113,16 @@ export const useAppStore = create<AppState>((set) => ({
         f.id === fieldId
           ? { ...f, rules: f.rules.filter((_, i) => i !== ruleIndex) }
           : f
+      ),
+    })),
+
+  // Field edit
+  setEditingFieldId: (id) => set({ editingFieldId: id }),
+
+  updateFieldLabel: (fieldId, label) =>
+    set((state) => ({
+      fields: state.fields.map((f) =>
+        f.id === fieldId ? { ...f, label } : f
       ),
     })),
 
@@ -165,4 +185,14 @@ export const useAppStore = create<AppState>((set) => ({
     })),
 
   setDrawingRegionForStepId: (info) => set({ drawingRegionForStepId: info }),
+
+  updateFieldRegion: (fieldId, regionType, region) =>
+    set((state) => ({
+      fields: state.fields.map((f) => {
+        if (f.id !== fieldId) return f;
+        if (regionType === 'value') return { ...f, value_region: region };
+        if (regionType === 'anchor') return { ...f, anchor_region: region };
+        return f;
+      }),
+    })),
 }));

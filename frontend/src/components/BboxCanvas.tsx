@@ -1,9 +1,17 @@
-import { useCallback } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import { useBboxDrawing } from '../hooks/useBboxDrawing';
 import { normalizedToPixel, pixelToNormalized } from '../utils/coords';
 import { detectFormat } from '../api/client';
 import type { Field, FieldResult, Region } from '../types';
+
+interface DragState {
+  fieldId: string;
+  regionType: 'value' | 'anchor';
+  startMouseX: number;
+  startMouseY: number;
+  origRegion: Region;
+}
 
 const COLORS = {
   staticValue: { fill: 'rgba(59,130,246,0.25)', stroke: 'rgb(59,130,246)' },
@@ -53,10 +61,36 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
   const setPendingAnchor = useAppStore((s) => s.setPendingAnchor);
   const pdfId = useAppStore((s) => s.pdfId);
   const extractionResults = useAppStore((s) => s.extractionResults);
+  const editingFieldId = useAppStore((s) => s.editingFieldId);
+  const setEditingFieldId = useAppStore((s) => s.setEditingFieldId);
+  const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
   const chainEditFieldId = useAppStore((s) => s.chainEditFieldId);
   const drawingRegionForStepId = useAppStore((s) => s.drawingRegionForStepId);
   const setDrawingRegionForStepId = useAppStore((s) => s.setDrawingRegionForStepId);
   const updateChainStep = useAppStore((s) => s.updateChainStep);
+  const updateFieldRegion = useAppStore((s) => s.updateFieldRegion);
+  const activeTemplateId = useAppStore((s) => s.activeTemplateId);
+
+  // Drag state for moving existing boxes
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ x: number; y: number } | null>(null);
+  const dragStartedRef = useRef(false);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // Escape key exits field edit mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && editingFieldId) {
+        setEditingFieldId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingFieldId, setEditingFieldId]);
+
+  // Are we in a mode that allows editing fields?
+  const isTestingMode = activeTemplateId !== null && !useAppStore.getState().extractionResults;
+  const canEdit = !isTestingMode;
 
   const currentPageFields = fields.filter(
     (f) => f.value_region.page === currentPage || (f.anchor_region && f.anchor_region.page === currentPage)
@@ -126,6 +160,77 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
   );
 
   const { currentRect, handlers } = useBboxDrawing(onDrawComplete);
+
+  const startDrag = useCallback((fieldId: string, regionType: 'value' | 'anchor', e: React.MouseEvent) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const field = fields.find((f) => f.id === fieldId);
+    if (!field) return;
+    const origRegion = regionType === 'anchor' ? field.anchor_region : field.value_region;
+    if (!origRegion) return;
+    dragStartedRef.current = true;
+    setDrag({
+      fieldId,
+      regionType,
+      startMouseX: e.clientX - rect.left,
+      startMouseY: e.clientY - rect.top,
+      origRegion,
+    });
+    setDragPreview(null);
+  }, [canEdit, fields]);
+
+  const onSvgMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (drag) {
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      setDragPreview({ x: mx - drag.startMouseX, y: my - drag.startMouseY });
+    }
+    handlers.onMouseMove(e);
+  }, [drag, handlers]);
+
+  const onSvgMouseUp = useCallback(() => {
+    if (drag && dragPreview) {
+      const dxNorm = dragPreview.x / pageWidth;
+      const dyNorm = dragPreview.y / pageHeight;
+      // Only commit if moved more than 2px
+      if (Math.abs(dragPreview.x) > 2 || Math.abs(dragPreview.y) > 2) {
+        const orig = drag.origRegion;
+        const newRegion: Region = {
+          ...orig,
+          x: Math.max(0, Math.min(1 - orig.width, orig.x + dxNorm)),
+          y: Math.max(0, Math.min(1 - orig.height, orig.y + dyNorm)),
+        };
+        updateFieldRegion(drag.fieldId, drag.regionType, newRegion);
+      }
+      setDrag(null);
+      setDragPreview(null);
+      return;
+    }
+    if (drag) {
+      setDrag(null);
+      setDragPreview(null);
+      return;
+    }
+    handlers.onMouseUp();
+  }, [drag, dragPreview, pageWidth, pageHeight, updateFieldRegion, handlers]);
+
+  const onSvgMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (dragStartedRef.current) {
+      dragStartedRef.current = false;
+      return;
+    }
+    // Click on empty canvas exits field edit mode
+    if (editingFieldId && e.target === svgRef.current) {
+      setEditingFieldId(null);
+    }
+    if (!drag) handlers.onMouseDown(e);
+  }, [drag, handlers, editingFieldId, setEditingFieldId]);
   const previewColor = drawingRegionForStepId
     ? { fill: 'rgba(245,158,11,0.1)', stroke: 'rgb(245,158,11)' }
     : drawMode === 'dynamic' && !pendingAnchor
@@ -133,8 +238,8 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
       : { fill: 'rgba(59,130,246,0.15)', stroke: 'rgb(59,130,246)' };
 
   return (
-    <svg className="absolute top-0 left-0 w-full h-full" style={{ cursor: 'crosshair', zIndex: 10 }}
-      onMouseDown={handlers.onMouseDown} onMouseMove={handlers.onMouseMove} onMouseUp={handlers.onMouseUp}>
+    <svg ref={svgRef} className="absolute top-0 left-0 w-full h-full" style={{ cursor: drag ? 'grabbing' : 'crosshair', zIndex: 10 }}
+      onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp}>
       <defs>
         <style>{`
           @keyframes pulse-anchor { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -145,13 +250,30 @@ export default function BboxCanvas({ pageWidth, pageHeight }: Props) {
         </marker>
       </defs>
 
-      {currentPageFields.map((field) => (
-        <g key={field.id} opacity={chainEditFieldId && field.id !== chainEditFieldId ? 0.15 : 1}
-          style={{ transition: 'opacity 0.2s ease' }}>
-          <FieldOverlay field={field} pw={pageWidth} ph={pageHeight}
-            currentPage={currentPage} onRemove={() => removeField(field.id)} result={resultByLabel[field.label] ?? null} />
-        </g>
-      ))}
+      {currentPageFields.map((field) => {
+        const activeFieldId = editingFieldId ?? chainEditFieldId;
+        const isHidden = activeFieldId && field.id !== activeFieldId;
+        const isFieldEditing = editingFieldId === field.id;
+        // Compute drag offset for this field's boxes
+        const isDragging = drag?.fieldId === field.id;
+        const valueDx = isDragging && drag.regionType === 'value' && dragPreview ? dragPreview.x : 0;
+        const valueDy = isDragging && drag.regionType === 'value' && dragPreview ? dragPreview.y : 0;
+        const anchorDx = isDragging && drag.regionType === 'anchor' && dragPreview ? dragPreview.x : 0;
+        const anchorDy = isDragging && drag.regionType === 'anchor' && dragPreview ? dragPreview.y : 0;
+        return (
+          <g key={field.id}
+            style={{ display: isHidden ? 'none' : undefined }}>
+            <FieldOverlay field={field} pw={pageWidth} ph={pageHeight}
+              currentPage={currentPage} onRemove={() => removeField(field.id)} result={resultByLabel[field.label] ?? null}
+              onStartDrag={canEdit ? startDrag : undefined}
+              isEditing={isFieldEditing}
+              onSelect={canEdit ? () => setEditingFieldId(field.id) : undefined}
+              onUpdateLabel={canEdit ? (label: string) => updateFieldLabel(field.id, label) : undefined}
+              valueDragOffset={{ dx: valueDx, dy: valueDy }}
+              anchorDragOffset={{ dx: anchorDx, dy: anchorDy }} />
+          </g>
+        );
+      })}
 
       {/* Chain edit mode visualizations */}
       {chainEditFieldId && (() => {
@@ -293,9 +415,18 @@ function ChainEditOverlay({ field, pw, ph }: { field: Field; pw: number; ph: num
 }
 
 /** Renders a field with ghost boxes and shift arrows when anchor has shifted */
-function FieldOverlay({ field, pw, ph, currentPage, onRemove, result }: {
+function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDrag, isEditing, onSelect, onUpdateLabel, valueDragOffset, anchorDragOffset }: {
   field: Field; pw: number; ph: number; currentPage: number; onRemove: () => void; result: FieldResult | null;
+  onStartDrag?: (fieldId: string, regionType: 'value' | 'anchor', e: React.MouseEvent) => void;
+  isEditing?: boolean;
+  onSelect?: () => void;
+  onUpdateLabel?: (label: string) => void;
+  valueDragOffset: { dx: number; dy: number };
+  anchorDragOffset: { dx: number; dy: number };
 }) {
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [labelDraft, setLabelDraft] = useState(field.label);
+  const labelInputRef = useRef<HTMLInputElement>(null);
   const hasResult = result !== null;
   const isShifted = hasResult && (result.status === 'anchor_shifted' || result.status === 'anchor_relocated');
   const dx = result?.anchor_dx ?? 0;
@@ -310,11 +441,15 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result }: {
   const valueOnPage = field.value_region.page === currentPage;
   const anchorOnPage = field.anchor_region?.page === currentPage;
 
-  // Original template positions
-  const vPos = valueOnPage ? normalizedToPixel(field.value_region.x, field.value_region.y, pw, ph) : null;
+  // Original template positions + drag offsets
+  const vPosRaw = valueOnPage ? normalizedToPixel(field.value_region.x, field.value_region.y, pw, ph) : null;
+  const vPos = vPosRaw ? { x: vPosRaw.x + valueDragOffset.dx, y: vPosRaw.y + valueDragOffset.dy } : null;
   const vDim = valueOnPage ? normalizedToPixel(field.value_region.width, field.value_region.height, pw, ph) : null;
-  const aPos = anchorOnPage && field.anchor_region ? normalizedToPixel(field.anchor_region.x, field.anchor_region.y, pw, ph) : null;
+  const aPosRaw = anchorOnPage && field.anchor_region ? normalizedToPixel(field.anchor_region.x, field.anchor_region.y, pw, ph) : null;
+  const aPos = aPosRaw ? { x: aPosRaw.x + anchorDragOffset.dx, y: aPosRaw.y + anchorDragOffset.dy } : null;
   const aDim = anchorOnPage && field.anchor_region ? normalizedToPixel(field.anchor_region.width, field.anchor_region.height, pw, ph) : null;
+  const isDraggingValue = valueDragOffset.dx !== 0 || valueDragOffset.dy !== 0;
+  const isDraggingAnchor = anchorDragOffset.dx !== 0 || anchorDragOffset.dy !== 0;
 
   // Actual value position (from adjacent scan or offset)
   let actualVx: number | null = null;
@@ -350,6 +485,22 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result }: {
   }
 
   const vHeight = vDim?.y ?? 16;
+
+  const startLabelEdit = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onUpdateLabel) return;
+    if (!isEditing && onSelect) onSelect();
+    setLabelDraft(field.label);
+    setEditingLabel(true);
+    setTimeout(() => labelInputRef.current?.focus(), 0);
+  }, [isEditing, onSelect, onUpdateLabel, field.label]);
+
+  const commitLabel = useCallback(() => {
+    if (onUpdateLabel && labelDraft.trim() && labelDraft.trim() !== field.label) {
+      onUpdateLabel(labelDraft.trim());
+    }
+    setEditingLabel(false);
+  }, [onUpdateLabel, labelDraft, field.label]);
 
   return (
     <g className="group">
@@ -423,8 +574,8 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result }: {
             <>
               <rect x={aPos.x} y={aPos.y} width={aDim.x} height={aDim.y}
                 fill={hasResult && result.status === 'anchor_mismatch' ? COLORS.resultError.fill : hasResult ? (resultColor?.fill ?? anchorBaseColor.fill) : anchorBaseColor.fill}
-                stroke={hasResult && result.status === 'anchor_mismatch' ? COLORS.resultError.stroke : hasResult ? (resultColor?.stroke ?? anchorBaseColor.stroke) : anchorBaseColor.stroke}
-                strokeWidth={2} rx={2} />
+                stroke={isDraggingAnchor ? 'rgb(99,102,241)' : hasResult && result.status === 'anchor_mismatch' ? COLORS.resultError.stroke : hasResult ? (resultColor?.stroke ?? anchorBaseColor.stroke) : anchorBaseColor.stroke}
+                strokeWidth={isDraggingAnchor ? 3 : 2} strokeDasharray={isDraggingAnchor ? '4 2' : undefined} rx={2} />
               <rect x={aPos.x} y={aPos.y - 18}
                 width={Math.max(aDim.x, (field.expected_anchor_text ?? '').length * 7 + 20)} height={18}
                 fill={hasResult && result.status === 'anchor_mismatch' ? COLORS.resultError.stroke : anchorBaseColor.stroke} rx={2} />
@@ -432,24 +583,79 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result }: {
               <text x={aPos.x + 15} y={aPos.y - 4} fill="white" fontSize={10} fontWeight={600} fontFamily="system-ui, sans-serif">
                 {field.expected_anchor_text}
               </text>
+              {/* Drag handle for anchor */}
+              {onStartDrag && (
+                <rect x={aPos.x} y={aPos.y} width={aDim.x} height={aDim.y}
+                  fill="transparent" style={{ cursor: 'move' }} rx={2}
+                  onMouseDown={(e) => onStartDrag(field.id, 'anchor', e)} />
+              )}
             </>
           )}
 
-          {vPos && vDim && (
+          {vPos && vDim && (() => {
+            const labelBarWidth = Math.max(vDim.x, field.label.length * 8 + (hasResult ? 36 : 16));
+            return (
             <>
               <rect x={vPos.x} y={vPos.y} width={vDim.x} height={vDim.y}
-                fill={valueColor.fill} stroke={valueColor.stroke} strokeWidth={hasResult ? 3 : 2} rx={2} />
+                fill={valueColor.fill}
+                stroke={isDraggingValue ? 'rgb(99,102,241)' : isEditing ? 'rgb(99,102,241)' : valueColor.stroke}
+                strokeWidth={isDraggingValue ? 3 : isEditing ? 3 : hasResult ? 3 : 2}
+                strokeDasharray={isDraggingValue ? '4 2' : isEditing ? '6 3' : undefined} rx={2} />
+              {/* Label bar */}
               <rect x={vPos.x} y={vPos.y - 20}
-                width={Math.max(vDim.x, field.label.length * 8 + (hasResult ? 36 : 16))} height={20}
-                fill={valueColor.stroke} rx={2} />
-              <text x={vPos.x + 4} y={vPos.y - 5} fill="white" fontSize={12} fontWeight={600} fontFamily="system-ui, sans-serif">
-                {field.label}
-              </text>
-              {hasResult && (
+                width={labelBarWidth} height={20}
+                fill={isEditing ? 'rgb(99,102,241)' : valueColor.stroke} rx={2} />
+              {/* Inline label editing */}
+              {editingLabel ? (
+                <foreignObject x={vPos.x} y={vPos.y - 20}
+                  width={Math.max(labelBarWidth, 160)} height={20}>
+                  <input
+                    ref={labelInputRef}
+                    value={labelDraft}
+                    onChange={(e) => setLabelDraft((e.target as HTMLInputElement).value)}
+                    onBlur={commitLabel}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitLabel();
+                      if (e.key === 'Escape') setEditingLabel(false);
+                      e.stopPropagation();
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{
+                      width: '100%', height: '100%', background: 'rgb(99,102,241)', color: 'white',
+                      border: 'none', outline: 'none', padding: '0 4px', fontSize: '12px', fontWeight: 600,
+                      fontFamily: 'system-ui, sans-serif', borderRadius: '2px',
+                    }}
+                  />
+                </foreignObject>
+              ) : (
+                <text x={vPos.x + 4} y={vPos.y - 5} fill="white" fontSize={12} fontWeight={600} fontFamily="system-ui, sans-serif"
+                  style={{ pointerEvents: 'none' }}>
+                  {field.label}
+                </text>
+              )}
+              {hasResult && !editingLabel && (
                 <text x={vPos.x + field.label.length * 8 + 12} y={vPos.y - 5} fill="white" fontSize={12} fontWeight={700} fontFamily="system-ui, sans-serif">
                   {result.status === 'ok' || result.status === 'anchor_shifted' ? '\u2713' : result.status === 'empty' ? '\u2014' : '\u2717'}
                 </text>
               )}
+              {/* Hover edit icon (pencil) — enters edit mode + inline rename */}
+              {onUpdateLabel && !editingLabel && (
+                <g className="opacity-0 group-hover:opacity-100 cursor-pointer"
+                  onClick={startLabelEdit}>
+                  <circle cx={vPos.x + labelBarWidth + 12} cy={vPos.y - 10} r={9} fill="rgb(99,102,241)" />
+                  <g transform={`translate(${vPos.x + labelBarWidth + 5.5}, ${vPos.y - 16.5})`}>
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" transform="scale(0.54)" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" transform="scale(0.54)" />
+                  </g>
+                </g>
+              )}
+              {/* Drag handle for value */}
+              {onStartDrag && (
+                <rect x={vPos.x} y={vPos.y} width={vDim.x} height={vDim.y}
+                  fill="transparent" style={{ cursor: 'move' }} rx={2}
+                  onMouseDown={(e) => onStartDrag(field.id, 'value', e)} />
+              )}
+              {/* Delete icon on hover */}
               <g className="opacity-0 group-hover:opacity-100 cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); onRemove(); }}>
                 <circle cx={vPos.x + vDim.x - 8} cy={vPos.y - 10} r={8} fill="rgb(239,68,68)" />
@@ -457,7 +663,8 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result }: {
                   fontWeight={700} textAnchor="middle" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none' }}>x</text>
               </g>
             </>
-          )}
+            );
+          })()}
         </>
       )}
     </g>

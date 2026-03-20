@@ -1,6 +1,6 @@
 {
   "id": "32b39fc9-e7ee-459a-9e9b-d5f4912dcd4f",
-  "name": "test2",
+  "name": "payroll template",
   "fields": [
     {
       "id": "d6b992f1-ecd2-4610-aad3-7058af2c612a",
@@ -83,7 +83,93 @@
       "expected_anchor_text": "gross pay",
       "rules": [],
       "value_format": null,
-      "chain": []
+      "chain": [
+        {
+          "id": "6469c6a5-dfd0-4fdf-8c6a-d1392beaf732",
+          "category": "search",
+          "type": "exact_position",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "efde5d1b-8725-4d49-8f6e-829f5bb21524",
+          "category": "search",
+          "type": "vertical_slide",
+          "slide_tolerance": 0.1,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "4e73183d-8404-4474-a651-b6c7625ff4c1",
+          "category": "search",
+          "type": "full_page_search",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "584b5617-6116-468b-989d-1d178953f7e1",
+          "category": "value",
+          "type": "offset_value",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": null,
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        },
+        {
+          "id": "d54d9074-7224-48c9-8955-32f53c9c729e",
+          "category": "value",
+          "type": "adjacent_scan",
+          "slide_tolerance": null,
+          "search_region": null,
+          "search_direction": "right",
+          "expected_value": null,
+          "data_type": null,
+          "min_value": null,
+          "max_value": null,
+          "allowed_values": null,
+          "regex": null,
+          "date_threshold": null,
+          "compare_field_label": null,
+          "compare_operator": null
+        }
+      ]
     },
     {
       "id": "f27c7af7-3d4f-48f8-91ca-5954fc00a252",
@@ -150,29 +236,29 @@
       "chain": []
     },
     {
-      "id": "ef97c878-0988-4dca-884c-916b5e40c3c4",
+      "id": "b53fd549-f68b-4d12-9e56-c20ebcae9f7e",
       "label": "net value",
       "type": "dynamic",
       "value_region": {
         "page": 1,
-        "x": 0.5021786492374728,
-        "y": 0.8232323232323232,
-        "width": 0.23529411764705882,
-        "height": 0.050505050505050504
+        "x": 0.5032679738562091,
+        "y": 0.8005050505050505,
+        "width": 0.35947712418300654,
+        "height": 0.054292929292929296
       },
       "anchor_region": {
         "page": 1,
-        "x": 0.12091503267973856,
-        "y": 0.8249158249158249,
-        "width": 0.22875816993464052,
-        "height": 0.045454545454545456
+        "x": 0.12254901960784313,
+        "y": 0.797979797979798,
+        "width": 0.2696078431372549,
+        "height": 0.05303030303030303
       },
-      "expected_anchor_text": "net label",
+      "expected_anchor_text": "net",
       "rules": [],
       "value_format": "currency",
       "chain": [
         {
-          "id": "72e0d0dd-d2a5-4c09-ba0e-05f5c55431b8",
+          "id": "37eb44ee-27d1-4074-b99c-138277406db3",
           "category": "search",
           "type": "exact_position",
           "slide_tolerance": null,
@@ -189,7 +275,7 @@
           "compare_operator": null
         },
         {
-          "id": "1d15d797-bd42-44b4-854a-85c8c6cf0ffe",
+          "id": "018649d5-d9c3-4829-96b1-85d436d6c2da",
           "category": "search",
           "type": "vertical_slide",
           "slide_tolerance": 0.3,
@@ -206,7 +292,7 @@
           "compare_operator": null
         },
         {
-          "id": "783e86b0-79b3-4739-97f0-1e09f6e92be6",
+          "id": "be32b7ba-1155-49ed-9354-c8191b2410b9",
           "category": "search",
           "type": "full_page_search",
           "slide_tolerance": null,
@@ -223,7 +309,7 @@
           "compare_operator": null
         },
         {
-          "id": "df74164b-e4fb-405e-800b-ce918fe2f578",
+          "id": "d301a13d-29bf-4dee-a896-eb29289680b8",
           "category": "value",
           "type": "offset_value",
           "slide_tolerance": null,
@@ -240,7 +326,7 @@
           "compare_operator": null
         },
         {
-          "id": "6d5082a1-7673-4520-9fb4-bab45a1ff7f2",
+          "id": "359e6436-5b74-4ecc-8194-5530e5206287",
           "category": "value",
           "type": "adjacent_scan",
           "slide_tolerance": null,

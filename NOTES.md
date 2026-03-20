@@ -13,9 +13,13 @@ Initial approach used Claude AI to validate/clean extracted text. Removed becaus
 - Adds latency and API cost per extraction
 - For known document templates, deterministic rules are more reliable
 
-### Phase 2: Deterministic Static/Dynamic Fields (current)
+### Phase 2: Deterministic Static/Dynamic Fields
 
 No AI. Pure algorithmic extraction with two field types and a validation rules engine.
+
+### Phase 3: Configurable Chain System (current)
+
+Replaced hardcoded anchor fallback logic with per-field configurable chain pipelines. Each field defines its own search → value → validate strategy instead of using a one-size-fits-all approach. Also added PDF library for managing uploaded files.
 
 ---
 
@@ -125,7 +129,7 @@ When adding an `exact_match` rule, the "Use Current" button extracts the text fr
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Header: PDF Data Extractor          [Upload New]   │
+│  Header: PDF Data Extractor — file.pdf  [Files][+]  │
 ├────────────┬──────────────────────┬─────────────────┤
 │  Left      │  Center              │  Right          │
 │  Sidebar   │  PDF Viewer          │  Test Results   │
@@ -133,11 +137,24 @@ When adding an `exact_match` rule, the "Use Current" button extracts the text fr
 │  - Mode    │  + Toolbar           │                 │
 │  - Draw    │    (zoom/pan/hide)   │  - Pass/fail    │
 │  - Fields  │                      │  - Per-field    │
-│  - Rules   │                      │  - Rule details │
+│  - Chain   │                      │  - Rule details │
+│  - Rules   │                      │  - Chain traces │
 │  - Save    │                      │  - Anchor info  │
 │  - Temps   │                      │                 │
 └────────────┴──────────────────────┴─────────────────┘
 ```
+
+### App Startup & PDF Management
+
+On startup, the app auto-loads the first uploaded PDF so the editor is immediately visible — no blank upload screen. Upload is a **modal** triggered by the header "Upload" button. The "Files" button opens a dropdown to switch between uploaded PDFs.
+
+If no PDFs exist at all, a minimal empty state with an "Upload PDF" button is shown.
+
+### Header Controls
+
+- **Files** button: dropdown listing all uploaded PDFs with switch/delete
+- **Upload** button: opens modal for drag-and-drop multi-file upload
+- Current filename shown next to the app title
 
 ### PDF Toolbar
 
@@ -152,11 +169,34 @@ When adding an `exact_match` rule, the "Use Current" button extracts the text fr
 - **Test results**: Border colors change (green=OK, red=error, blue=shifted, amber=relocated)
 - **Shifted fields**: Gray ghost boxes at original position + purple shift arrows + colored boxes at new position
 - **Adjacent-found values**: Value box renders at the actual data location, not the offset position
+- **Draggable boxes**: In edit/create mode, anchor and value boxes can be grabbed and dragged to reposition them (indigo dashed border while dragging). No need to delete and redraw.
+
+### Per-Field Edit Mode
+
+Clicking the pencil icon (visible on hover) on a sidebar field row enters edit mode:
+- The field label turns into an inline input for renaming (Enter to confirm, Escape to cancel)
+- `editingFieldId` is set in the store, which hides all other fields on the canvas (`display: none`)
+- The selected field gets an indigo dashed border on the canvas
+- Drag handles (`cursor: move`) on anchor/value boxes allow repositioning
+- Escape key or clicking empty canvas exits edit mode
+- The sidebar row highlights with an indigo border to show which field is active
+
+Both the pencil (edit) and X (delete) icons on sidebar field rows are hidden by default and appear on hover (`group-hover/field:opacity-100`).
+
+### Chain Edit Mode on PDF
+
+When editing a field's chain, all other fields are fully hidden (same mechanism as field edit mode). The active field shows:
+- Vertical slide tolerance zone (amber dashed rectangle)
+- Full-page search boundary (subtle page outline)
+- Custom region search areas (amber dashed rectangle with "search region" label)
+- Adjacent scan direction arrows (blue arrows showing scan direction)
+- Offset vector (indigo dashed arrow from anchor center to value center)
 
 ### Results Panel (right slide-out)
 
 - Pass/fail count summary
 - Per-field cards: label, type badge, value, status badge, anchor info, shift description, rule pass/fail list
+- Chain step traces: per-step execution trace with category colors (amber=search, blue=value, green/red=validate)
 - Color-coded: green rows for OK, red for errors, blue tint for shifted, amber tint for relocated
 
 ---
@@ -168,7 +208,7 @@ bcs/
 ├── backend/                  # Python FastAPI
 │   ├── main.py               # App entry, CORS
 │   ├── routers/
-│   │   ├── pdfs.py           # Upload, serve, extract-region, detect-format
+│   │   ├── pdfs.py           # Upload (multi-file), serve, list, delete, extract-region, detect-format
 │   │   ├── templates.py      # CRUD + update for templates
 │   │   └── extract.py        # POST /extract, POST /test
 │   ├── services/
@@ -176,21 +216,27 @@ bcs/
 │   │   ├── extraction_service.py  # Legacy fallback chain, rule validation, two-pass extraction
 │   │   ├── chain_engine.py   # Configurable chain execution engine (replaces hardcoded logic)
 │   │   └── template_store.py # JSON file storage
-│   └── models/schemas.py     # Region, Field, Rule, Template, FieldResult, etc.
+│   ├── models/schemas.py     # Region, Field, Rule, ChainStep, StepTrace, Template, FieldResult
+│   └── storage/
+│       ├── uploads/           # Uploaded PDF files ({uuid}.pdf)
+│       │   └── _metadata.json # Original filenames + page counts
+│       └── templates/         # Saved template JSON files
 │
 └── frontend/                 # React + TypeScript + Tailwind + Vite
     └── src/
+        ├── App.tsx                  # Main layout, header, files dropdown, upload modal, auto-load first PDF
         ├── components/
-        │   ├── PdfUploader.tsx       # Drag-and-drop upload
+        │   ├── PdfUploader.tsx       # Standalone upload component (used as fallback, not primary)
         │   ├── PdfViewer.tsx         # react-pdf + toolbar (zoom/pan/hide markers)
-        │   ├── BboxCanvas.tsx        # SVG overlay: fields, ghost boxes, shift arrows, chain edit mode
+        │   ├── BboxCanvas.tsx        # SVG overlay: fields, ghost boxes, shift arrows, chain edit, drag-to-move
         │   ├── TemplatePanel.tsx     # Sidebar: 3 modes, fields, rules/chain, templates
         │   ├── ExtractionResults.tsx # Right panel: test results + chain traces
-        │   ├── ChainEditor.tsx       # Chain pipeline editor (steps, config, reorder)
+        │   ├── ChainEditor.tsx       # Chain pipeline editor (steps, config, reorder, region draw)
         │   └── RulesEditor.tsx       # Legacy inline rule editor per field
-        ├── store/appStore.ts         # Zustand: fields, templates, results, drawing state
+        ├── store/appStore.ts         # Zustand: fields, templates, results, drawing, chain edit, drag state
         ├── hooks/useBboxDrawing.ts   # Mouse drag → rectangle
-        ├── api/client.ts             # All backend API calls
+        ├── api/client.ts             # All backend API calls (upload, list, delete PDFs + templates + extract)
+        ├── types/index.ts            # Region, Field, ChainStep, StepTrace, Rule, FieldResult, etc.
         └── utils/coords.ts           # Pixel ↔ normalized conversion
 ```
 
@@ -198,8 +244,10 @@ bcs/
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/pdfs/upload` | Upload PDF, get pdf_id + page_count |
+| POST | `/pdfs/upload` | Upload PDF, get pdf_id + page_count + filename |
+| GET | `/pdfs` | List all uploaded PDFs (filename, page_count, pdf_id) |
 | GET | `/pdfs/{id}` | Serve PDF file |
+| DELETE | `/pdfs/{id}` | Delete an uploaded PDF |
 | POST | `/pdfs/{id}/extract-region` | Extract text from a single region |
 | POST | `/pdfs/{id}/detect-format` | Extract text + auto-detect format |
 | POST | `/templates` | Create template |
@@ -271,6 +319,32 @@ Replaced the hardcoded 4-step anchor fallback with a configurable chain pipeline
 - `ChainEditor.tsx`: Vertical pipeline UI with connected steps, drag reorder, inline config
 - `StepTrace`: Each chain execution produces per-step traces shown in test results
 
+### Custom Region Search
+
+The `region_search` chain step allows users to draw a search region directly on the PDF. Instead of searching the full page or sliding vertically, the engine only looks for the anchor text within the user-defined rectangle. This is useful when anchor text appears multiple times on a page and you need to constrain which instance to match.
+
+**Flow:** User adds a `region_search` step → clicks "Draw Region" → draws a rectangle on the PDF → that region is saved as `search_region` on the step → the chain engine uses it during extraction.
+
+When in region drawing mode, an amber banner appears on the PDF and the next drawn rectangle is captured as the search region (not as a new field).
+
+### Draggable Field Boxes
+
+Anchor and value boxes can be repositioned by dragging them directly on the PDF in create/edit mode. Hover on a box → cursor changes to move → drag to new position → release to commit. The box shows an indigo dashed border while being dragged. This eliminates the need to delete and redraw fields when the position is slightly off.
+
+Implementation: Transparent SVG rects with `cursor: move` overlay each field box. On mousedown they `stopPropagation()` + `preventDefault()` to prevent the drawing hook from firing. A synchronous `dragStartedRef` (useRef) is set immediately to prevent a race condition where React's batched `setDrag()` hasn't updated yet when `onSvgMouseDown` checks the `drag` state — without the ref, the drawing handler would also fire, creating a duplicate field on top of the dragged one. On mouseup, the pixel delta is converted to normalized coordinates and the field's region is updated in the store.
+
+### PDF Library & Upload Modal
+
+PDFs persist across sessions. Users don't need to re-upload files they've already uploaded.
+
+**Backend storage:** Uploaded PDFs are stored in `backend/storage/uploads/` with metadata (original filename, page count) in `_metadata.json`. The `GET /pdfs` endpoint lists all uploaded files. `DELETE /pdfs/{id}` removes them.
+
+**Auto-load on startup:** On mount, the app fetches the PDF list and auto-loads the first one so the editor is immediately visible. No blank upload screen on startup when files exist.
+
+**Upload modal:** Upload is a modal (not a full page), triggered by the header "Upload" button. Supports drag-and-drop and file picker with multi-file selection. The last uploaded file opens automatically.
+
+**PDF switching:** The header "Files" button opens a dropdown listing all uploaded PDFs. Click to switch, hover to reveal delete button. Current PDF is highlighted with "Current" badge.
+
 ### Value Format as Template Metadata
 
 Auto-detecting format at template creation time (not at test time) means the template carries enough information to find the right value even when the layout changes dramatically. The format acts as a fingerprint for the value.
@@ -286,3 +360,6 @@ Auto-detecting format at template creation time (not at test time) means the tem
 5. **Anchor not found on layout shift** — Fixed by implementing the 4-step fallback chain (exact → slide → fullpage → not found).
 6. **Relocated anchor finds empty value** — Offset vector becomes invalid when anchor moves horizontally. Fixed with adjacent scanning using value_format matching.
 7. **Value box renders at wrong position** — When adjacent scan finds value, box rendered at offset position (empty space) instead of actual data location. Fixed by returning `value_found_x/y/width` from backend and using those coordinates in the SVG overlay.
+8. **Circular import between chain_engine and extraction_service** — Both imported from each other. Fixed by using lazy imports (`_validate_rule` wrapper with deferred `from services.extraction_service import validate_rule`) and duplicating `_anchor_matches` locally in chain_engine.
+9. **useBboxDrawing handlers referenced before definition** — Drag handler callbacks used `handlers` from `useBboxDrawing` before the hook was called. Fixed by moving `useBboxDrawing` call above the drag handler definitions.
+10. **Drag-to-move also creates new field** — Race condition: `startDrag` calls `setDrag()` but React batches the state update, so `onSvgMouseDown` still sees `drag` as `null` and starts the drawing handler too. Fixed with a synchronous `dragStartedRef` (useRef) checked in `onSvgMouseDown` before delegating to the drawing handler.
