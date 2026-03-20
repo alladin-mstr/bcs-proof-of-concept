@@ -312,7 +312,8 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
               onSelect={canEdit ? () => setEditingFieldId(field.id) : undefined}
               onUpdateLabel={canEdit ? (label: string) => updateFieldLabel(field.id, label) : undefined}
               valueDragOffset={{ dx: valueDx, dy: valueDy }}
-              anchorDragOffset={{ dx: anchorDx, dy: anchorDy }} />
+              anchorDragOffset={{ dx: anchorDx, dy: anchorDy }}
+              source={source} />
           </g>
         );
       })}
@@ -457,7 +458,7 @@ function ChainEditOverlay({ field, pw, ph }: { field: Field; pw: number; ph: num
 }
 
 /** Renders a field with ghost boxes and shift arrows when anchor has shifted */
-function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDrag, isEditing, onSelect, onUpdateLabel, valueDragOffset, anchorDragOffset }: {
+function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDrag, isEditing, onSelect, onUpdateLabel, valueDragOffset, anchorDragOffset, source }: {
   field: Field; pw: number; ph: number; currentPage: number; onRemove: () => void; result: FieldResult | null;
   onStartDrag?: (fieldId: string, regionType: 'value' | 'anchor', e: React.MouseEvent) => void;
   isEditing?: boolean;
@@ -465,10 +466,16 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
   onUpdateLabel?: (label: string) => void;
   valueDragOffset: { dx: number; dy: number };
   anchorDragOffset: { dx: number; dy: number };
+  source?: 'a' | 'b';
 }) {
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(field.label);
   const labelInputRef = useRef<HTMLInputElement>(null);
+  const templateMode = useAppStore((s) => s.templateMode);
+  const canEdit = useAppStore((s) => s.canDrawFields);
+  const setConnectDragFrom = useAppStore((s) => s.setConnectDragFrom);
+  const setConnectDragMouse = useAppStore((s) => s.setConnectDragMouse);
+  const isComparisonMode = source !== undefined && templateMode === 'comparison';
   const hasResult = result !== null;
   const isShifted = hasResult && (result.status === 'anchor_shifted' || result.status === 'anchor_relocated');
   const dx = result?.anchor_dx ?? 0;
@@ -704,6 +711,27 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
                 <text x={vPos.x + vDim.x - 8} y={vPos.y - 6} fill="white" fontSize={12}
                   fontWeight={700} textAnchor="middle" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none' }}>x</text>
               </g>
+              {/* Connection node for comparison mode — on the outer side edge */}
+              {isComparisonMode && canEdit && (() => {
+                const nodeX = source === 'a' ? vPos.x + vDim.x : vPos.x;
+                const nodeY = vPos.y + vDim.y / 2;
+                return (
+                  <g data-connect-node={field.id} style={{ cursor: 'crosshair' }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setConnectDragFrom({ fieldId: field.id, source: source! });
+                      setConnectDragMouse({ x: e.clientX, y: e.clientY });
+                    }}>
+                    {/* Outer ring */}
+                    <circle cx={nodeX} cy={nodeY} r={7}
+                      fill="white" stroke="rgb(139,92,246)" strokeWidth={2} />
+                    {/* Inner dot */}
+                    <circle cx={nodeX} cy={nodeY} r={3}
+                      fill="rgb(139,92,246)" />
+                  </g>
+                );
+              })()}
             </>
             );
           })()}

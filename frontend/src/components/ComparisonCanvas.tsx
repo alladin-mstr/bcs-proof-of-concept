@@ -321,6 +321,8 @@ function deriveConnections(fields: Field[]): ConnectionLine[] {
 
 function ConnectionOverlay({ containerRef }: { containerRef: React.RefObject<HTMLDivElement | null> }) {
   const fields = useAppStore((s) => s.fields);
+  const connectDragFrom = useAppStore((s) => s.connectDragFrom);
+  const connectDragMouse = useAppStore((s) => s.connectDragMouse);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   const connections = deriveConnections(fields);
@@ -330,20 +332,24 @@ function ConnectionOverlay({ containerRef }: { containerRef: React.RefObject<HTM
     const containerRect = containerRef.current.getBoundingClientRect();
     const newPos: Record<string, { x: number; y: number }> = {};
 
-    // Query the value rects specifically (not the whole field group which includes label bar)
+    // Query the value rects — position at the outer side edge (right for A, left for B)
     const fieldEls = containerRef.current.querySelectorAll<SVGRectElement>('[data-field-value]');
     for (const el of fieldEls) {
       const fieldId = el.getAttribute('data-field-value');
       if (!fieldId) continue;
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) continue;
+      const field = fields.find((f) => f.id === fieldId);
+      const isSourceA = (field?.source ?? 'a') === 'a';
       newPos[fieldId] = {
-        x: rect.left + rect.width / 2 - containerRect.left,
+        x: isSourceA
+          ? rect.right - containerRect.left    // right edge
+          : rect.left - containerRect.left,    // left edge
         y: rect.top + rect.height / 2 - containerRect.top,
       };
     }
     setPositions(newPos);
-  }, [containerRef]);
+  }, [containerRef, fields]);
 
   useLayoutEffect(() => {
     measurePositions();
@@ -393,7 +399,22 @@ function ConnectionOverlay({ containerRef }: { containerRef: React.RefObject<HTM
     return { conn, x1: posA.x, y1: posA.y, x2: posB.x, y2: posB.y };
   }).filter(Boolean) as Array<{ conn: ConnectionLine; x1: number; y1: number; x2: number; y2: number }>;
 
-  if (svgLines.length === 0) return null;
+  // Compute drag preview line in container-relative coords
+  let dragLine: { x1: number; y1: number; x2: number; y2: number } | null = null;
+  if (connectDragFrom && connectDragMouse && containerRef.current) {
+    const fromPos = positions[connectDragFrom.fieldId];
+    if (fromPos) {
+      const containerRect = containerRef.current.getBoundingClientRect();
+      dragLine = {
+        x1: fromPos.x,
+        y1: fromPos.y,
+        x2: connectDragMouse.x - containerRect.left,
+        y2: connectDragMouse.y - containerRect.top,
+      };
+    }
+  }
+
+  if (svgLines.length === 0 && !dragLine) return null;
 
   return (
     <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 20, overflow: 'visible' }}>
@@ -402,6 +423,15 @@ function ConnectionOverlay({ containerRef }: { containerRef: React.RefObject<HTM
           <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="rgba(139,92,246,0.3)" />
         </filter>
       </defs>
+      {/* Drag preview line */}
+      {dragLine && (
+        <g>
+          <line x1={dragLine.x1} y1={dragLine.y1} x2={dragLine.x2} y2={dragLine.y2}
+            stroke="rgb(139,92,246)" strokeWidth={2} strokeDasharray="6 4" opacity={0.7} />
+          <circle cx={dragLine.x1} cy={dragLine.y1} r={5} fill="rgb(139,92,246)" stroke="white" strokeWidth={2} />
+          <circle cx={dragLine.x2} cy={dragLine.y2} r={4} fill="rgb(139,92,246)" opacity={0.5} />
+        </g>
+      )}
       {svgLines.map(({ conn, x1, y1, x2, y2 }) => {
         const midX = (x1 + x2) / 2;
         const midY = (y1 + y2) / 2;
@@ -438,6 +468,15 @@ function ConnectionOverlay({ containerRef }: { containerRef: React.RefObject<HTM
 
 /* ─── Main comparison canvas ─── */
 
+const OP_OPTIONS: { value: CompareOperator; label: string }[] = [
+  { value: 'equals', label: 'is equal to' },
+  { value: 'not_equals', label: 'is not equal to' },
+  { value: 'less_than', label: 'is less than' },
+  { value: 'greater_than', label: 'is greater than' },
+  { value: 'less_or_equal', label: 'is at most' },
+  { value: 'greater_or_equal', label: 'is at least' },
+];
+
 export default function ComparisonCanvas() {
   const [collapsedA, setCollapsedA] = useState(false);
   const [collapsedB, setCollapsedB] = useState(false);
@@ -447,6 +486,10 @@ export default function ComparisonCanvas() {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const fields = useAppStore((s) => s.fields);
+  const addRule = useAppStore((s) => s.addRule);
+  const pendingConnection = useAppStore((s) => s.pendingConnection);
+  const setPendingConnection = useAppStore((s) => s.setPendingConnection);
+  const connectDragFrom = useAppStore((s) => s.connectDragFrom);
   const hasConnections = deriveConnections(fields).length > 0;
 
   const handleToggleLinkages = () => {
@@ -471,6 +514,66 @@ export default function ComparisonCanvas() {
     if (index !== DEFAULT_ZOOM_INDEX) setShowLinkages(false);
   };
 
+  const setConnectDragFrom = useAppStore((s) => s.setConnectDragFrom);
+  const setConnectDragMouse = useAppStore((s) => s.setConnectDragMouse);
+
+  // Global mouse handlers for connection drag
+  useEffect(() => {
+    if (!connectDragFrom) return;
+    const onMove = (e: MouseEvent) => {
+      useAppStore.getState().setConnectDragMouse({ x: e.clientX, y: e.clientY });
+    };
+    const onUp = (e: MouseEvent) => {
+      const state = useAppStore.getState();
+      const dragFrom = state.connectDragFrom;
+      if (!dragFrom) return;
+
+      // Check if mouse is over a field from the opposite source
+      const els = document.elementsFromPoint(e.clientX, e.clientY);
+      let targetFieldId: string | null = null;
+      for (const el of els) {
+        // Check for data-field-value attribute on SVG rects
+        const fv = el.getAttribute('data-field-value');
+        if (fv) { targetFieldId = fv; break; }
+        // Also check parent <g> with data-field-id
+        const parent = el.closest('[data-field-id]');
+        if (parent) {
+          const fid = parent.getAttribute('data-field-id');
+          if (fid) { targetFieldId = fid; break; }
+        }
+      }
+
+      if (targetFieldId && targetFieldId !== dragFrom.fieldId) {
+        // Verify the target field is from the opposite source
+        const targetField = state.fields.find((f) => f.id === targetFieldId);
+        if (targetField && (targetField.source ?? 'a') !== dragFrom.source) {
+          state.setPendingConnection({ fromId: dragFrom.fieldId, toId: targetFieldId });
+        }
+      }
+
+      state.setConnectDragFrom(null);
+      state.setConnectDragMouse(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [connectDragFrom]);
+
+  const confirmConnect = (operator: CompareOperator) => {
+    if (!pendingConnection) return;
+    const toField = fields.find((f) => f.id === pendingConnection.toId);
+    if (!toField) return;
+    addRule(pendingConnection.fromId, {
+      type: 'compare_field',
+      compare_field_label: toField.label,
+      compare_operator: operator,
+    });
+    setPendingConnection(null);
+  };
+
   return (
     <div ref={rootRef} className="relative flex w-full h-full">
       <ComparisonPane source="a" collapsed={collapsedA} onToggle={() => setCollapsedA((v) => !v)}
@@ -479,7 +582,38 @@ export default function ComparisonCanvas() {
       <div className="w-px bg-gray-300 flex-shrink-0" />
       <ComparisonPane source="b" collapsed={collapsedB} onToggle={() => setCollapsedB((v) => !v)}
         zoomIndex={zoomIndexB} onZoomIndexChange={handleZoomB} />
-      {showLinkages && <ConnectionOverlay containerRef={rootRef} />}
+      <ConnectionOverlay containerRef={rootRef} />
+
+      {/* Operator picker popup after drag-to-connect on canvas */}
+      {pendingConnection && (() => {
+        const fromField = fields.find((f) => f.id === pendingConnection.fromId);
+        const toField = fields.find((f) => f.id === pendingConnection.toId);
+        if (!fromField || !toField) return null;
+        return (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setPendingConnection(null)} />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-white rounded-xl shadow-2xl border border-violet-200 p-3 w-52">
+              <p className="text-xs text-gray-700 mb-2 text-center">
+                <span className="font-semibold text-blue-700">{fromField.label}</span>
+                {' \u2194 '}
+                <span className="font-semibold text-emerald-700">{toField.label}</span>
+              </p>
+              <div className="space-y-1">
+                {OP_OPTIONS.map((op) => (
+                  <button key={op.value} onClick={() => confirmConnect(op.value)}
+                    className="w-full text-left px-2 py-1.5 text-xs rounded-lg hover:bg-violet-50 text-gray-700 hover:text-violet-700 transition-colors">
+                    {op.label}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setPendingConnection(null)}
+                className="w-full mt-2 text-[10px] text-gray-400 hover:text-gray-600 text-center">
+                Cancel
+              </button>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

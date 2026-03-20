@@ -72,6 +72,14 @@ interface AppState {
   setActiveSource: (source: "a" | "b") => void;
   setTemplateMode: (mode: "single" | "comparison") => void;
   setCurrentPageB: (page: number) => void;
+
+  // Connection drag state (for drag-to-connect on PDF canvas)
+  connectDragFrom: { fieldId: string; source: 'a' | 'b' } | null;
+  connectDragMouse: { x: number; y: number } | null; // screen coords
+  pendingConnection: { fromId: string; toId: string } | null;
+  setConnectDragFrom: (from: { fieldId: string; source: 'a' | 'b' } | null) => void;
+  setConnectDragMouse: (pos: { x: number; y: number } | null) => void;
+  setPendingConnection: (conn: { fromId: string; toId: string } | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -255,4 +263,12 @@ export const useAppStore = create<AppState>((set) => ({
   setTemplateMode: (mode) => set({ templateMode: mode }),
 
   setCurrentPageB: (page) => set({ currentPageB: page }),
+
+  // Connection drag state
+  connectDragFrom: null,
+  connectDragMouse: null,
+  pendingConnection: null,
+  setConnectDragFrom: (from) => set({ connectDragFrom: from }),
+  setConnectDragMouse: (pos) => set({ connectDragMouse: pos }),
+  setPendingConnection: (conn) => set({ pendingConnection: conn }),
 }));

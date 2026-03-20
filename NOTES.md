@@ -392,3 +392,40 @@ Auto-detecting format at template creation time (not at test time) means the tem
 12. **compare_field fails on non-numeric values** — `compare_field` rule forced `parse_currency()` on all values, failing on dates like "March 18, 2026". Fixed: `equals`/`not_equals` now do direct string comparison. Ordering operators try numeric first, fall back to string lexicographic.
 13. **ComparisonFieldsPanel misses same-named cross-PDF connections** — `fields.find(f => f.label === label)` returned the first match (same source), skipping the cross-PDF target. Fixed by preferring fields on the opposite source.
 14. **ComparisonFieldsPanel only checked legacy rules, not chain steps** — Chain-based `compare_field` steps weren't shown as connections. Fixed by scanning both `field.rules` and `field.chain` with deduplication.
+15. **Connection drag from PDF canvas nodes didn't register** — Drop target rects rendered inside each BboxCanvas SVG pane. The global `window mouseup` handler fired first and cleared drag state, removing the drop targets before they could see the event. Fixed by moving drop detection to the global `mouseup` handler using `document.elementsFromPoint()` to find the target field via `data-field-value` / `data-field-id` attributes.
+
+---
+
+## Phase 5: Canvas Connection Nodes (current)
+
+Added drag-to-connect directly on the PDF canvas fields in comparison mode. Users can grab a connection node on a field and drag to a field on the other PDF to create a `compare_field` rule.
+
+### What was added
+
+**Connection nodes on fields (BboxCanvas.tsx):**
+- Each field in comparison mode shows a violet circle (ring + inner dot) on the edge of its value box
+- Source A fields: node on right edge. Source B fields: node on left edge
+- Mousedown initiates connection drag via store state
+
+**Drag-to-connect flow:**
+1. Mousedown on node → `setConnectDragFrom({ fieldId, source })` in store
+2. Global `mousemove` (via `useEffect` in ComparisonCanvas) → updates `connectDragMouse`
+3. `ConnectionOverlay` renders dashed violet preview line from origin to cursor
+4. Global `mouseup` → `document.elementsFromPoint()` checks for field from opposite source
+5. If valid target → `setPendingConnection({ fromId, toId })`
+6. Operator picker popup (equals, not equals, less than, etc.)
+7. Confirm → `addRule(fromId, { type: 'compare_field', ... })`
+
+**Always-visible connections:**
+- `ConnectionOverlay` now always renders (not gated behind Linkages toggle)
+- Existing connection lines (violet curved paths with operator badges) shown at all times
+- Line endpoints positioned at field edges (right for A, left for B)
+
+### Store additions (appStore.ts)
+- `connectDragFrom: { fieldId, source } | null`
+- `connectDragMouse: { x, y } | null` (screen coords)
+- `pendingConnection: { fromId, toId } | null`
+- Setters: `setConnectDragFrom`, `setConnectDragMouse`, `setPendingConnection`
+
+### Key design decision: cross-pane drag
+Each PDF pane has its own SVG canvas. SVG events don't bubble across panes. Solution: drag state lives in Zustand store (shared), global window event listeners handle mousemove/mouseup, and `document.elementsFromPoint()` detects the drop target across pane boundaries.
