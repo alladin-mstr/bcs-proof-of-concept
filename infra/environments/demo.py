@@ -34,3 +34,6 @@ class Demo(BaseConfig):
     # App Service SKU
     app_service_sku_tier = "Basic"
     app_service_sku_name = "B1"
+
+    # Health check
+    health_check_path = "/health"

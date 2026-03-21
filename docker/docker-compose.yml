@@ -6,4 +6,8 @@ services:
       - "8000:8000"
     environment:
       - STORAGE_BACKEND=azure
+      - AZURE_STORAGE_ACCOUNT=sa0bcs0demo
+      - AZURE_STORAGE_PDFS_CONTAINER=pdfs
+      - AZURE_STORAGE_TEMPLATES_CONTAINER=templates
+      - CORS_ORIGINS=https://app-bcs-demo-westeurope.azurewebsites.net
       - WEBSITES_PORT=8000
