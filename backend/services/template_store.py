@@ -1,19 +1,13 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 from models.schemas import Template, TemplateCreate
-
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "storage" / "templates"
-
-
-def _template_path(template_id: str) -> Path:
-    return TEMPLATES_DIR / f"{template_id}.json"
+from services.storage_backend import get_storage
 
 
 def save_template(template_id: str, data: TemplateCreate) -> Template:
-    TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
-
     template = Template(
         id=template_id,
         name=data.name,
@@ -21,37 +15,34 @@ def save_template(template_id: str, data: TemplateCreate) -> Template:
         created_at=datetime.now(timezone.utc),
         mode=data.mode,
     )
-
-    _template_path(template_id).write_text(
-        template.model_dump_json(indent=2), encoding="utf-8"
-    )
+    get_storage().save_template(template_id, template.model_dump_json(indent=2))
     return template
 
 
 def get_template(template_id: str) -> Template | None:
-    path = _template_path(template_id)
-    if not path.exists():
+    content = get_storage().get_template(template_id)
+    if content is None:
         return None
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    return Template(**raw)
+    return Template(**json.loads(content))
 
 
 def list_templates() -> list[Template]:
-    TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+    storage = get_storage()
     templates: list[Template] = []
-    for path in sorted(TEMPLATES_DIR.glob("*.json")):
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        templates.append(Template(**raw))
+    for tid in storage.list_template_ids():
+        content = storage.get_template(tid)
+        if content is not None:
+            templates.append(Template(**json.loads(content)))
     return templates
 
 
 def update_template(template_id: str, data: TemplateCreate) -> Template | None:
-    path = _template_path(template_id)
-    if not path.exists():
+    storage = get_storage()
+    existing_content = storage.get_template(template_id)
+    if existing_content is None:
         return None
 
-    # Preserve original created_at
-    existing = json.loads(path.read_text(encoding="utf-8"))
+    existing = json.loads(existing_content)
     template = Template(
         id=template_id,
         name=data.name,
@@ -59,14 +50,9 @@ def update_template(template_id: str, data: TemplateCreate) -> Template | None:
         created_at=existing.get("created_at", datetime.now(timezone.utc).isoformat()),
         mode=data.mode,
     )
-
-    path.write_text(template.model_dump_json(indent=2), encoding="utf-8")
+    storage.save_template(template_id, template.model_dump_json(indent=2))
     return template
 
 
 def delete_template(template_id: str) -> bool:
-    path = _template_path(template_id)
-    if not path.exists():
-        return False
-    path.unlink()
-    return True
+    return get_storage().delete_template(template_id)

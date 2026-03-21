@@ -1,0 +1,2 @@
+# Local wheel built from the MSTR-common repo (includes mstr_common and mstr_infra)
+../wheel_file/mstr_common-0.0.17-py3-none-any.whl

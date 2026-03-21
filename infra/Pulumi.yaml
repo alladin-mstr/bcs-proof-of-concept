@@ -1,0 +1,6 @@
+name: bcs
+runtime:
+  name: python
+  options:
+    virtualenv: ../venv
+description: BCS PDF Data Extractor - Azure infrastructure

@@ -1,14 +1,11 @@
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException
 
 from models.schemas import ExtractionRequest, ExtractionResponse, TestRequest
 from services.extraction_service import extract_all_fields
+from services.storage_backend import get_storage
 from services.template_store import get_template
 
 router = APIRouter(tags=["extract"])
-
-UPLOADS_DIR = Path(__file__).resolve().parent.parent / "storage" / "uploads"
 
 
 @router.post("/extract", response_model=ExtractionResponse)
@@ -17,18 +14,23 @@ async def extract_data(request: ExtractionRequest):
     if template is None:
         raise HTTPException(status_code=404, detail="Template not found.")
 
-    pdf_path = UPLOADS_DIR / f"{request.pdf_id}.pdf"
-    if not pdf_path.exists():
+    storage = get_storage()
+    if not storage.pdf_exists(request.pdf_id):
         raise HTTPException(status_code=404, detail="PDF not found.")
 
     pdf_path_b = None
     if request.pdf_id_b:
-        pdf_path_b_resolved = UPLOADS_DIR / f"{request.pdf_id_b}.pdf"
-        if not pdf_path_b_resolved.exists():
+        if not storage.pdf_exists(request.pdf_id_b):
             raise HTTPException(status_code=404, detail="PDF B not found.")
-        pdf_path_b = str(pdf_path_b_resolved)
 
-    results = extract_all_fields(str(pdf_path), template.fields, pdf_path_b)
+    with storage.pdf_temp_path(request.pdf_id) as pdf_path:
+        if request.pdf_id_b:
+            with storage.pdf_temp_path(request.pdf_id_b) as path_b:
+                pdf_path_b = path_b
+                results = extract_all_fields(pdf_path, template.fields, pdf_path_b)
+        else:
+            results = extract_all_fields(pdf_path, template.fields, None)
+
     needs_review = any(r.status not in ("ok",) for r in results)
 
     return ExtractionResponse(
@@ -42,18 +44,20 @@ async def extract_data(request: ExtractionRequest):
 
 @router.post("/test", response_model=ExtractionResponse)
 async def test_extraction(request: TestRequest):
-    pdf_path = UPLOADS_DIR / f"{request.pdf_id}.pdf"
-    if not pdf_path.exists():
+    storage = get_storage()
+    if not storage.pdf_exists(request.pdf_id):
         raise HTTPException(status_code=404, detail="PDF not found.")
 
-    pdf_path_b = None
-    if request.pdf_id_b:
-        pdf_path_b_resolved = UPLOADS_DIR / f"{request.pdf_id_b}.pdf"
-        if not pdf_path_b_resolved.exists():
-            raise HTTPException(status_code=404, detail="PDF B not found.")
-        pdf_path_b = str(pdf_path_b_resolved)
+    if request.pdf_id_b and not storage.pdf_exists(request.pdf_id_b):
+        raise HTTPException(status_code=404, detail="PDF B not found.")
 
-    results = extract_all_fields(str(pdf_path), request.fields, pdf_path_b)
+    with storage.pdf_temp_path(request.pdf_id) as pdf_path:
+        if request.pdf_id_b:
+            with storage.pdf_temp_path(request.pdf_id_b) as path_b:
+                results = extract_all_fields(pdf_path, request.fields, path_b)
+        else:
+            results = extract_all_fields(pdf_path, request.fields, None)
+
     needs_review = any(r.status not in ("ok",) for r in results)
 
     return ExtractionResponse(
