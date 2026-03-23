@@ -24,7 +24,6 @@ export default function TemplatePanel() {
   const currentPageB = useAppStore((s) => s.currentPageB);
   const setExtractionResults = useAppStore((s) => s.setExtractionResults);
   const removeField = useAppStore((s) => s.removeField);
-  const setPendingAnchor = useAppStore((s) => s.setPendingAnchor);
   const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
   const editingFieldId = useAppStore((s) => s.editingFieldId);
   const setEditingFieldId = useAppStore((s) => s.setEditingFieldId);

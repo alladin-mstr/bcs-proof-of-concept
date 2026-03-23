@@ -111,11 +111,6 @@ function getStepLabel(step: ChainStep): string {
   return allSteps.find((s) => s.type === step.type)?.label ?? step.type;
 }
 
-function getStepIcon(step: ChainStep): string {
-  const allSteps = [...SEARCH_STEPS, ...VALUE_STEPS];
-  return (allSteps as readonly { type: string; icon?: string }[]).find((s) => s.type === step.type)?.icon ?? '•';
-}
-
 function getStepTooltip(step: ChainStep): string | null {
   const allSteps = [...SEARCH_STEPS, ...VALUE_STEPS];
   return (allSteps as readonly { type: string; tooltip?: string }[]).find((s) => s.type === step.type)?.tooltip ?? null;

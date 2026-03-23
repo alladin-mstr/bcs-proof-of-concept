@@ -710,7 +710,6 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
             const topPos = normalizedToPixel(areaTop.region.x, areaTop.region.y, pw, ph);
             const topDim = normalizedToPixel(areaTop.region.width, areaTop.region.height, pw, ph);
             const bottomPos = normalizedToPixel(areaBottom.region.x, areaBottom.region.y, pw, ph);
-            const bottomDim = normalizedToPixel(areaBottom.region.width, areaBottom.region.height, pw, ph);
             // Use value box x-range for horizontal constraint, full width as fallback
             const vr = field.value_region;
             const vrPos = normalizedToPixel(vr.x, vr.y, pw, ph);
