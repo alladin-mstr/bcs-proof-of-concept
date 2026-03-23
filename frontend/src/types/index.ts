@@ -25,8 +25,8 @@ export interface Rule {
 
 export type ChainStepCategory = "search" | "value" | "validate";
 
-export type SearchStepType = "exact_position" | "vertical_slide" | "full_page_search" | "region_search";
-export type ValueStepType = "offset_value" | "adjacent_scan";
+export type SearchStepType = "exact_position" | "vertical_slide" | "full_page_search" | "region_search" | "block_search" | "bracket_search" | "area_search";
+export type ValueStepType = "offset_value" | "adjacent_scan" | "block_value" | "intersection_value" | "area_text_value";
 export type ValidateStepType = "not_empty" | "exact_match" | "data_type" | "range" | "one_of" | "pattern" | "date_before" | "date_after" | "compare_field";
 
 export interface ChainStep {
@@ -36,6 +36,8 @@ export interface ChainStep {
   // Search config
   slide_tolerance?: number;
   search_region?: Region;
+  // Block search/value config
+  block_extract_mode?: "same_block" | "rest_of_block" | "next_block";
   // Value config
   search_direction?: string;
   // Validate config
@@ -59,13 +61,25 @@ export interface StepTrace {
   region?: Region;
 }
 
+export type AnchorRole = "primary" | "secondary" | "area_top" | "area_bottom";
+export type AnchorMode = "static" | "single" | "bracket" | "area_value" | "area_locator" | "area_bracket";
+
+export interface Anchor {
+  id: string;
+  role: AnchorRole;
+  region: Region;
+  expected_text: string;
+}
+
 export interface Field {
   id: string;
   label: string;
   type: "static" | "dynamic";
+  anchor_mode: AnchorMode;
+  anchors: Anchor[];
   value_region: Region;
-  anchor_region?: Region;
-  expected_anchor_text?: string;
+  anchor_region?: Region;           // Legacy: single anchor
+  expected_anchor_text?: string;    // Legacy: single anchor text
   rules: Rule[];
   value_format?: "currency" | "number" | "integer" | "date" | "string";
   chain: ChainStep[];
@@ -110,4 +124,17 @@ export interface ExtractionResponse {
   results: FieldResult[];
   needs_review: boolean;
   pdf_id_b?: string;
+}
+
+// Layout analysis types
+export interface LayoutLine {
+  text: string;
+  bbox?: { x: number; y: number; width: number; height: number };
+}
+
+export interface LayoutBlock {
+  id: string;
+  text: string;
+  bbox: { x: number; y: number; width: number; height: number };
+  lines: LayoutLine[];
 }

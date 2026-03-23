@@ -90,6 +90,12 @@ export async function detectFormat(
   return response.data;
 }
 
+// Get layout blocks for a page of a PDF
+export async function getPageLayout(pdfId: string, page: number, lineMargin: number = 1.0): Promise<LayoutBlock[]> {
+  const response = await api.get(`/pdfs/${pdfId}/layout`, { params: { page, line_margin: lineMargin } });
+  return response.data.blocks;
+}
+
 // Test extraction with current fields (no saved template needed)
 export async function testExtraction(
   pdfId: string,

@@ -74,6 +74,8 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
   const setDrawingRegionForStepId = useAppStore((s) => s.setDrawingRegionForStepId);
   const updateChainStep = useAppStore((s) => s.updateChainStep);
   const updateFieldRegion = useAppStore((s) => s.updateFieldRegion);
+  const anchorWizard = useAppStore((s) => s.anchorWizard);
+  const completeAnchorWizardStep = useAppStore((s) => s.completeAnchorWizardStep);
 
   // Drag state for moving existing boxes
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -138,6 +140,24 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
       if (!canEdit) return;
       const region = pixelRectToRegion(rect, currentPage, pageWidth, pageHeight);
 
+      // If anchor wizard is active, auto-extract text from the drawn region
+      if (anchorWizard) {
+        if (pdfId) {
+          try {
+            const { extractRegion } = await import('../api/client');
+            const text = await extractRegion(pdfId, region);
+            if (!text?.trim()) {
+              window.alert('No text found in the drawn region. Try drawing over visible text.');
+              return;
+            }
+            completeAnchorWizardStep(region, text.trim());
+          } catch {
+            window.alert('Failed to extract text from region.');
+          }
+        }
+        return;
+      }
+
       // If drawing a search region for a chain step, capture it there
       if (drawingRegionForStepId) {
         updateChainStep(drawingRegionForStepId.fieldId, drawingRegionForStepId.stepId, { search_region: region });
@@ -148,7 +168,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
       if (drawMode === 'static') {
         const label = window.prompt('Enter a label for this field:');
         if (!label?.trim()) return;
-        addField({ id: crypto.randomUUID(), label: label.trim(), type: 'static', value_region: region, rules: [], chain: [] });
+        addField({ id: crypto.randomUUID(), label: label.trim(), type: 'static', anchor_mode: 'static', anchors: [], value_region: region, rules: [], chain: [] });
       } else if (!pendingAnchor) {
         const expectedText = window.prompt('What text should this anchor contain?');
         if (!expectedText?.trim()) return;
@@ -181,6 +201,13 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
           id: crypto.randomUUID(),
           label: label.trim(),
           type: 'dynamic',
+          anchor_mode: 'single',
+          anchors: [{
+            id: crypto.randomUUID(),
+            role: 'primary',
+            region: pendingAnchor.region,
+            expected_text: pendingAnchor.expectedText,
+          }],
           value_region: region,
           anchor_region: pendingAnchor.region,
           expected_anchor_text: pendingAnchor.expectedText,
@@ -191,7 +218,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
         setPendingAnchor(null);
       }
     },
-    [canEdit, addField, currentPage, pageWidth, pageHeight, drawMode, pendingAnchor, setPendingAnchor, pdfId, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId]
+    [canEdit, addField, currentPage, pageWidth, pageHeight, drawMode, pendingAnchor, setPendingAnchor, pdfId, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId, anchorWizard, completeAnchorWizardStep]
   );
 
   const { currentRect, handlers } = useBboxDrawing(onDrawComplete);
@@ -342,6 +369,40 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
           </g>
         );
       })()}
+
+      {/* Anchor wizard banner */}
+      {anchorWizard && (() => {
+        const step = anchorWizard.steps[anchorWizard.currentStep];
+        const bannerText = `Step ${anchorWizard.currentStep + 1}/${anchorWizard.steps.length}: ${step.prompt}`;
+        return (
+          <g>
+            <rect x={0} y={0} width={pageWidth} height={28} fill="rgba(245,158,11,0.95)" rx={0} />
+            <text x={pageWidth / 2} y={18} fill="white" fontSize={12} fontWeight={600}
+              fontFamily="system-ui, sans-serif" textAnchor="middle">
+              {bannerText}
+            </text>
+          </g>
+        );
+      })()}
+
+      {/* Render completed wizard anchors */}
+      {anchorWizard && anchorWizard.completedAnchors.map((anchor) => {
+        const ap = normalizedToPixel(anchor.region.x, anchor.region.y, pageWidth, pageHeight);
+        const ad = normalizedToPixel(anchor.region.width, anchor.region.height, pageWidth, pageHeight);
+        const isArea = anchor.role === 'area_top' || anchor.role === 'area_bottom';
+        return (
+          <g key={anchor.id}>
+            <rect x={ap.x} y={ap.y} width={ad.x} height={ad.y}
+              fill={isArea ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.2)'}
+              stroke={isArea ? 'rgb(34,197,94)' : 'rgb(245,158,11)'}
+              strokeWidth={2} strokeDasharray={isArea ? '6 3' : undefined} rx={2} />
+            <text x={ap.x + 3} y={ap.y - 4} fill={isArea ? 'rgb(34,197,94)' : 'rgb(245,158,11)'}
+              fontSize={9} fontWeight={600} fontFamily="system-ui, sans-serif">
+              {anchor.role}: {anchor.expected_text}
+            </text>
+          </g>
+        );
+      })}
 
       {currentRect && (
         <rect x={currentRect.x} y={currentRect.y} width={currentRect.width} height={currentRect.height}
@@ -619,7 +680,8 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
       ) : (
         <>
           {/* ── NORMAL RENDERING (no shift) ── */}
-          {aPos && aDim && (
+          {/* Legacy single anchor rendering (when no anchors array) */}
+          {aPos && aDim && (!field.anchors || field.anchors.length === 0) && (
             <>
               <rect x={aPos.x} y={aPos.y} width={aDim.x} height={aDim.y}
                 fill={hasResult && result.status === 'anchor_mismatch' ? COLORS.resultError.fill : hasResult ? (resultColor?.fill ?? anchorBaseColor.fill) : anchorBaseColor.fill}
@@ -632,7 +694,6 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
               <text x={aPos.x + 15} y={aPos.y - 4} fill="white" fontSize={10} fontWeight={600} fontFamily="system-ui, sans-serif">
                 {field.expected_anchor_text}
               </text>
-              {/* Drag handle for anchor */}
               {onStartDrag && (
                 <rect x={aPos.x} y={aPos.y} width={aDim.x} height={aDim.y}
                   fill="transparent" style={{ cursor: 'move' }} rx={2}
@@ -640,6 +701,67 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
               )}
             </>
           )}
+
+          {/* Area shading between area_top and area_bottom anchors */}
+          {field.anchors && (() => {
+            const areaTop = field.anchors.find(a => a.role === 'area_top' && a.region.page === currentPage);
+            const areaBottom = field.anchors.find(a => a.role === 'area_bottom' && a.region.page === currentPage);
+            if (!areaTop || !areaBottom) return null;
+            const topPos = normalizedToPixel(areaTop.region.x, areaTop.region.y, pw, ph);
+            const topDim = normalizedToPixel(areaTop.region.width, areaTop.region.height, pw, ph);
+            const bottomPos = normalizedToPixel(areaBottom.region.x, areaBottom.region.y, pw, ph);
+            const bottomDim = normalizedToPixel(areaBottom.region.width, areaBottom.region.height, pw, ph);
+            // Use value box x-range for horizontal constraint, full width as fallback
+            const vr = field.value_region;
+            const vrPos = normalizedToPixel(vr.x, vr.y, pw, ph);
+            const vrDim = normalizedToPixel(vr.width, vr.height, pw, ph);
+            const areaX = vrPos.x;
+            const areaRight = vrPos.x + vrDim.x;
+            const areaY = topPos.y + topDim.y;
+            const areaH = bottomPos.y - areaY;
+            if (areaH <= 0) return null;
+            return (
+              <rect
+                x={areaX} y={areaY} width={areaRight - areaX} height={areaH}
+                fill="rgba(34,197,94,0.06)"
+                stroke="rgba(34,197,94,0.25)"
+                strokeWidth={1} strokeDasharray="8 4" rx={4}
+              />
+            );
+          })()}
+
+          {/* Multi-anchor rendering from field.anchors[] */}
+          {field.anchors?.map((anchor) => {
+            if (anchor.region.page !== currentPage) return null;
+            const ap = normalizedToPixel(anchor.region.x, anchor.region.y, pw, ph);
+            const ad = normalizedToPixel(anchor.region.width, anchor.region.height, pw, ph);
+            const isArea = anchor.role === 'area_top' || anchor.role === 'area_bottom';
+            const isSecondary = anchor.role === 'secondary';
+            const anchorColor = isArea
+              ? { fill: 'rgba(34,197,94,0.15)', stroke: 'rgb(34,197,94)', label: 'rgb(34,197,94)' }
+              : isSecondary
+                ? { fill: 'rgba(249,115,22,0.2)', stroke: 'rgb(249,115,22)', label: 'rgb(249,115,22)' }
+                : { fill: 'rgba(245,158,11,0.2)', stroke: 'rgb(245,158,11)', label: 'rgb(245,158,11)' };
+            const labelText = anchor.expected_text;
+            const labelWidth = Math.max(ad.x, labelText.length * 6.5 + 24);
+            return (
+              <g key={anchor.id}>
+                <rect x={ap.x} y={ap.y} width={ad.x} height={ad.y}
+                  fill={anchorColor.fill} stroke={anchorColor.stroke}
+                  strokeWidth={2} strokeDasharray={isArea ? '6 3' : undefined} rx={2} />
+                <rect x={ap.x} y={ap.y - 16} width={labelWidth} height={16}
+                  fill={anchorColor.stroke} rx={2} />
+                <AnchorIcon x={ap.x + 1} y={ap.y - 14} />
+                <text x={ap.x + 14} y={ap.y - 3} fill="white" fontSize={9} fontWeight={600} fontFamily="system-ui, sans-serif">
+                  {labelText}
+                </text>
+                <text x={ap.x + labelWidth - 3} y={ap.y - 3} fill="rgba(255,255,255,0.6)" fontSize={7} fontWeight={500}
+                  fontFamily="system-ui, sans-serif" textAnchor="end">
+                  {anchor.role}
+                </text>
+              </g>
+            );
+          })}
 
           {vPos && vDim && (() => {
             const labelBarWidth = Math.max(vDim.x, field.label.length * 8 + (hasResult ? 36 : 16));

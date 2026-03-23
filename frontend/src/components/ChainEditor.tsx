@@ -7,7 +7,7 @@ import type {
   CompareOperator,
 } from "../types";
 
-// Step type definitions with labels and category colors
+// Step type definitions with labels, descriptions, and tooltips
 const SEARCH_STEPS = [
   {
     type: "exact_position",
@@ -109,6 +109,16 @@ const OPERATOR_LABELS: Record<CompareOperator, string> = {
 function getStepLabel(step: ChainStep): string {
   const allSteps = [...SEARCH_STEPS, ...VALUE_STEPS, ...VALIDATE_STEPS];
   return allSteps.find((s) => s.type === step.type)?.label ?? step.type;
+}
+
+function getStepIcon(step: ChainStep): string {
+  const allSteps = [...SEARCH_STEPS, ...VALUE_STEPS];
+  return (allSteps as readonly { type: string; icon?: string }[]).find((s) => s.type === step.type)?.icon ?? '•';
+}
+
+function getStepTooltip(step: ChainStep): string | null {
+  const allSteps = [...SEARCH_STEPS, ...VALUE_STEPS];
+  return (allSteps as readonly { type: string; tooltip?: string }[]).find((s) => s.type === step.type)?.tooltip ?? null;
 }
 
 function getStepSummary(step: ChainStep): string | null {
@@ -321,7 +331,7 @@ export default function ChainEditor({ field }: Props) {
               {globalIdx + 1}
             </span>
             {/* Step label */}
-            <span className={`text-[11px] font-medium ${colors.text} flex-1`}>
+            <span className={`text-[11px] font-medium ${colors.text} flex-1`} title={getStepTooltip(step) ?? undefined}>
               {getStepLabel(step)}
             </span>
             {/* Inline summary */}

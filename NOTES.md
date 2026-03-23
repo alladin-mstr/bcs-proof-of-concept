@@ -29,13 +29,21 @@ Added comparison mode where a template works with two PDFs side by side (e.g., o
 
 ## Core Concepts
 
-### Field Types
+### Field Types & Anchor Tiers
 
-**Static fields** — Single bounding box at a fixed position. For content that never moves (company name, logo area, header text). Extracts text directly from coordinates.
+All fields start as **static** (a single value box). Users upgrade by adding anchors from a tier dropdown:
 
-**Dynamic fields** — Two regions: an **anchor** (known text like "Total:") and a **value** (the actual data). The system verifies the anchor text matches before trusting the value. If anchor fails, value is flagged — never silently wrong.
+**Static** — Single bounding box at a fixed position. For content that never moves (company name, logo area, header text). Extracts text directly from coordinates.
 
-The key insight: the anchor is the reference point. The value always follows it at the same **offset vector** (fixed dx/dy distance). This means if the layout shifts, the value follows the anchor automatically.
+**Single Anchor** — One anchor (known text like "Total:") + value at a fixed offset. The system verifies the anchor text matches before trusting the value. If the layout shifts, the value follows the anchor automatically.
+
+**Bracket** — Two anchors: a column header (e.g., "Amount") and a row label (e.g., "Regular Pay"). The value is at their intersection — like reading a table cell by its column and row headers.
+
+**Area Value** — Two boundary anchors (top and bottom) define a region. All text between them IS the value. Solves variable-length content (1 line or 5 lines).
+
+**Area + Locator** — Two boundary anchors define a search area, then a third anchor locates the value inside. Solves ambiguity when the same label appears in multiple sections.
+
+**Area + Bracket** — Two boundary anchors scope to a section, then two bracket anchors intersect inside. The most precise option — handles duplicate labels AND table cell targeting.
 
 ### Why Not Just Fixed Boxes?
 
@@ -216,11 +224,11 @@ bcs/
 │   │   ├── templates.py      # CRUD + update for templates
 │   │   └── extract.py        # POST /extract, POST /test
 │   ├── services/
-│   │   ├── pdf_service.py    # pdfplumber extraction, anchor search (slide + fullpage + adjacent)
+│   │   ├── pdf_service.py    # pdfplumber extraction, anchor search (slide + fullpage + word-level + in-region), layout blocks
 │   │   ├── extraction_service.py  # Legacy fallback chain, rule validation, two-pass extraction
-│   │   ├── chain_engine.py   # Configurable chain execution engine (replaces hardcoded logic)
-│   │   └── template_store.py # JSON file storage
-│   ├── models/schemas.py     # Region, Field, Rule, ChainStep, StepTrace, Template, FieldResult
+│   │   ├── chain_engine.py   # Configurable chain engine (bracket_search, area_search, intersection_value, area_text_value, etc.)
+│   │   └── template_store.py # JSON file storage + field migration (legacy → anchor system)
+│   ├── models/schemas.py     # Region, Anchor, Field, Rule, ChainStep, StepTrace, Template, FieldResult
 │   └── storage/
 │       ├── uploads/           # Uploaded PDF files ({uuid}.pdf)
 │       │   └── _metadata.json # Original filenames + page counts
@@ -234,15 +242,15 @@ bcs/
         │   ├── PdfViewer.tsx         # react-pdf + toolbar (zoom/pan/hide markers) — single mode
         │   ├── ComparisonCanvas.tsx  # React Flow canvas with two PdfNode nodes — comparison mode
         │   ├── ComparisonFieldsPanel.tsx # Two-column drag-to-connect field linking UI
-        │   ├── BboxCanvas.tsx        # SVG overlay: fields, ghost boxes, shift arrows, chain edit, drag-to-move
-        │   ├── TemplatePanel.tsx     # Sidebar: 3 modes, fields/connections tabs, rules/chain, templates
+        │   ├── BboxCanvas.tsx        # SVG overlay: fields, multi-anchor rendering, area shading, ghost boxes, shift arrows, wizard banner
+        │   ├── TemplatePanel.tsx     # Sidebar: 3 modes, anchor tier selector, fields/connections tabs, templates
         │   ├── ExtractionResults.tsx # Right panel: test results + chain traces
-        │   ├── ChainEditor.tsx       # Chain pipeline editor (steps, config, reorder, region draw)
-        │   └── RulesEditor.tsx       # Legacy inline rule editor per field
-        ├── store/appStore.ts         # Zustand: fields, templates, results, drawing, chain edit, drag state, comparison mode
+        │   ├── ChainEditor.tsx       # Unified rules & chain editor (search + value + validate steps, icons, tooltips)
+        │   └── RulesEditor.tsx       # Legacy inline rule editor (no longer shown in UI)
+        ├── store/appStore.ts         # Zustand: fields, templates, results, anchor wizard, chain edit, drag state, comparison mode
         ├── hooks/useBboxDrawing.ts   # Mouse drag → rectangle
         ├── api/client.ts             # All backend API calls (upload, list, delete PDFs + templates + extract)
-        ├── types/index.ts            # Region, Field, ChainStep, StepTrace, Rule, FieldResult, etc.
+        ├── types/index.ts            # Region, Anchor, AnchorMode, Field, ChainStep, StepTrace, Rule, FieldResult, etc.
         └── utils/coords.ts           # Pixel ↔ normalized conversion
 ```
 
@@ -307,9 +315,9 @@ Pass 1 extracts all values. Pass 2 validates rules. This separation is necessary
 Replaced the hardcoded 4-step anchor fallback with a configurable chain pipeline per field. Each field has a `chain: ChainStep[]` that defines its extraction + validation strategy.
 
 **Chain step categories:**
-- **search** (amber): Find the anchor — if-else semantics (first match wins, rest skipped). Types: `exact_position`, `vertical_slide`, `full_page_search`, `region_search`
-- **value** (blue): Land the value — if-else semantics. Types: `offset_value`, `adjacent_scan`
-- **validate** (purple): Check the value — AND semantics (all must pass). Types: all existing rule types (`not_empty`, `exact_match`, `data_type`, `range`, `one_of`, `pattern`, `date_before`, `date_after`, `compare_field`)
+- **search** (amber): Find the anchor — if-else semantics (first match wins, rest skipped). Types: `exact_position`, `vertical_slide`, `full_page_search`, `region_search`, `block_search`, `bracket_search`, `area_search`
+- **value** (blue): Land the value — if-else semantics. Types: `offset_value`, `adjacent_scan`, `block_value`, `intersection_value`, `area_text_value`
+- **validate** (purple): Check the value — AND semantics (all must pass). Types: all rule types (`not_empty`, `exact_match`, `data_type`, `range`, `one_of`, `pattern`, `date_before`, `date_after`, `compare_field`)
 
 **Execution order:** search steps → value steps → validate steps. Each category is processed in order within the chain.
 
@@ -396,7 +404,7 @@ Auto-detecting format at template creation time (not at test time) means the tem
 
 ---
 
-## Phase 5: Canvas Connection Nodes (current)
+## Phase 5: Canvas Connection Nodes
 
 Added drag-to-connect directly on the PDF canvas fields in comparison mode. Users can grab a connection node on a field and drag to a field on the other PDF to create a `compare_field` rule.
 
@@ -429,3 +437,71 @@ Added drag-to-connect directly on the PDF canvas fields in comparison mode. User
 
 ### Key design decision: cross-pane drag
 Each PDF pane has its own SVG canvas. SVG events don't bubble across panes. Solution: drag state lives in Zustand store (shared), global window event listeners handle mousemove/mouseup, and `document.elementsFromPoint()` detects the drop target across pane boundaries.
+
+---
+
+## Phase 6: Anchor Tier System (current)
+
+Replaced the binary static/dynamic field model with a tiered anchor system. All fields start as static value boxes — users upgrade by adding anchors from a dropdown. Removed the Static/Dynamic draw mode toggle.
+
+### Anchor Tiers
+
+| Tier | Mode | Anchors | How value is found |
+|------|------|---------|-------------------|
+| 0 | **Static** | 0 | Fixed box at template position |
+| 1 | **Single** | 1 (primary) | Value at fixed offset from anchor |
+| 2 | **Bracket** | 2 (primary + secondary) | Column header × row label intersection |
+| 2b | **Area Value** | 2 (area_top + area_bottom) | All text between the two boundaries |
+| 3 | **Area + Locator** | 3 (area_top + area_bottom + primary) | Locator anchor found inside bounded area |
+| 4 | **Area + Bracket** | 4 (area_top + area_bottom + primary + secondary) | Column × row intersection inside bounded area |
+
+### Data Model
+
+**New `Anchor` model:**
+```python
+class Anchor(BaseModel):
+    id: str
+    role: Literal["primary", "secondary", "area_top", "area_bottom"]
+    region: Region
+    expected_text: str
+```
+
+**Field additions:** `anchor_mode` (tier selector), `anchors: list[Anchor]` (structured anchor list). Legacy `anchor_region` / `expected_anchor_text` kept for backward compatibility — migration in `template_store.py` auto-populates `anchors[0]` from legacy fields on load.
+
+### Backend Engine
+
+**New chain step types:**
+- `bracket_search` (search): Finds two anchors using word-level positioning (`search_anchor_word_position`), stores both in `ChainContext.anchors_found`
+- `area_search` (search): Finds area_top + area_bottom boundaries, computes bounded region, optionally finds primary/secondary inside the area
+- `intersection_value` (value): Extracts text at the intersection of primary's x (column) and secondary's y (row)
+- `area_text_value` (value): Extracts ALL text between area_top bottom edge and area_bottom top edge
+
+**Word-level search (`search_anchor_word_position`):** Unlike `search_anchor_fullpage` which returns line-start positions, this finds the exact position of matching word sequences. Critical for bracket intersection — "Amount" header must return x≈0.69, not the x of "Description" at the start of the same line.
+
+**Axis-weighted disambiguation (`prefer_axis`):** When multiple matches exist, column anchors prefer matches at similar x (`prefer_axis="x"`), row anchors prefer similar y (`prefer_axis="y"`). Prevents swapping column/row when both texts exist at different positions.
+
+**Default chains per tier:**
+- single: exact_position → vertical_slide → full_page_search → offset_value → adjacent_scan
+- bracket: bracket_search → intersection_value
+- area_value: area_search → area_text_value
+- area_locator: area_search → offset_value → adjacent_scan
+- area_bracket: area_search → intersection_value
+
+### Frontend UX
+
+**Anchor wizard:** Guided multi-step drawing flow. Each tier defines a sequence of steps (e.g., bracket = "Draw column header" → "Draw row label"). Banner on PDF shows current step. Completed anchors render as colored boxes during the wizard.
+
+**AnchorTierSelector:** Dropdown per field with icons, descriptions, and hover tooltips with ASCII art diagrams showing how each mode works. Tooltips render via `createPortal` to avoid sidebar overflow clipping. Selecting a mode clears previous anchors and starts the wizard fresh.
+
+**Anchor visualization on PDF:** Each anchor renders with role-based colors (primary=amber, secondary=orange, area=green dashed). Area modes show a green shaded region spanning full page width between area_top and area_bottom.
+
+**Unified Rules & Chain editor:** Removed standalone RulesEditor. The chain editor (renamed "Rules & Chain") is the single place for extraction steps AND validation rules. Validate-category chain steps ARE the rules.
+
+**Chain editor improvements:** Icons on each step (⊕ ↕ ◎ ⊞ ⬚ → ✛ etc.), hover tooltips explaining what each step does, conditional step availability based on anchor_mode, config panels showing anchor details for bracket/area steps.
+
+### Issues Encountered & Fixed
+
+16. **Word search returning line-start position** — `search_anchor_fullpage` returns the position of the first word on the line, not the matching word. For bracket intersection, "Amount" (4th word) returned x=0.12 (position of "Description"). Fixed by creating `search_anchor_word_position` that finds the shortest matching word sequence and returns its exact position.
+17. **Partial word matching** — `"gross" in "gross pay"` matched a single word "Gross" when searching for "gross pay". Fixed by removing the reverse substring check (`sub_norm in norm_expected`) — only `norm_expected in sub_norm` is allowed, requiring the found text to contain the full expected text.
+18. **Column/row anchor swap** — When "Amount" and "Gross Pay:" both exist in the search area, proximity ranking alone could match them to the wrong roles (column vs row). Fixed with `prefer_axis` parameter: column anchors weight x-distance 10x more, row anchors weight y-distance 10x more, so each sticks to its spatial axis.
+19. **Layout overlay tooltip clipped by sidebar** — Tooltip rendered inside the sidebar div which had `overflow-y: auto`. Fixed by rendering tooltips via `createPortal(...)` to `document.body` with `position: fixed`.

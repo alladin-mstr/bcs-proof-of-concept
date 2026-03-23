@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Field, Template, FieldResult, Region, Rule, ChainStep } from '../types';
+import type { Field, Template, FieldResult, Region, Rule, ChainStep, LayoutBlock, AnchorMode, AnchorRole, Anchor } from '../types';
 
 interface AppState {
   pdfId: string | null;
@@ -23,6 +23,19 @@ interface AppState {
   chainEditFieldId: string | null;
   // Drawing a search region for a chain step
   drawingRegionForStepId: { fieldId: string; stepId: string } | null;
+
+  // Anchor wizard (guided multi-step anchor drawing)
+  anchorWizard: {
+    fieldId: string;
+    targetMode: AnchorMode;
+    currentStep: number;
+    steps: { role: AnchorRole; prompt: string }[];
+    completedAnchors: Anchor[];
+  } | null;
+
+  // Layout overlay
+  layoutBlocks: LayoutBlock[];
+  showLayoutOverlay: boolean;
 
   // Whether field drawing/editing is enabled (set by TemplatePanel based on mode)
   canDrawFields: boolean;
@@ -65,6 +78,13 @@ interface AppState {
 
   updateRule: (fieldId: string, ruleIndex: number, updates: Partial<Rule>) => void;
   setCanDrawFields: (can: boolean) => void;
+  setLayoutBlocks: (blocks: LayoutBlock[]) => void;
+  setShowLayoutOverlay: (show: boolean) => void;
+
+  // Anchor wizard actions
+  startAnchorWizard: (fieldId: string, targetMode: AnchorMode) => void;
+  completeAnchorWizardStep: (region: Region, expectedText: string) => void;
+  cancelAnchorWizard: () => void;
 
   // Comparison mode actions
   setPdfB: (pdfId: string, pageCount: number, filename?: string) => void;
@@ -96,6 +116,11 @@ export const useAppStore = create<AppState>((set) => ({
   editingFieldId: null,
   chainEditFieldId: null,
   drawingRegionForStepId: null,
+
+  anchorWizard: null,
+
+  layoutBlocks: [],
+  showLayoutOverlay: false,
 
   canDrawFields: true,
 
@@ -250,6 +275,114 @@ export const useAppStore = create<AppState>((set) => ({
     })),
 
   setCanDrawFields: (can) => set({ canDrawFields: can }),
+  setLayoutBlocks: (blocks) => set({ layoutBlocks: blocks }),
+  setShowLayoutOverlay: (show) => set({ showLayoutOverlay: show }),
+
+  // Anchor wizard
+  startAnchorWizard: (fieldId, targetMode) => {
+    const WIZARD_STEPS: Record<AnchorMode, { role: AnchorRole; prompt: string }[]> = {
+      static: [],
+      single: [{ role: 'primary', prompt: 'Draw the anchor region (the label text near the value)' }],
+      bracket: [
+        { role: 'primary', prompt: 'Draw the COLUMN header above the value (e.g., "Amount")' },
+        { role: 'secondary', prompt: 'Draw the ROW label to the left of the value (e.g., "Gross Pay")' },
+      ],
+      area_value: [
+        { role: 'area_top', prompt: 'Draw the top boundary anchor (text above the value area)' },
+        { role: 'area_bottom', prompt: 'Draw the bottom boundary anchor (text below the value area)' },
+      ],
+      area_locator: [
+        { role: 'area_top', prompt: 'Draw the top area boundary' },
+        { role: 'area_bottom', prompt: 'Draw the bottom area boundary' },
+        { role: 'primary', prompt: 'Draw the locator anchor (the label inside the area)' },
+      ],
+      area_bracket: [
+        { role: 'area_top', prompt: 'Draw the top area boundary' },
+        { role: 'area_bottom', prompt: 'Draw the bottom area boundary' },
+        { role: 'primary', prompt: 'Draw the COLUMN header above the value (inside the area)' },
+        { role: 'secondary', prompt: 'Draw the ROW label to the left of the value (inside the area)' },
+      ],
+    };
+    set({
+      anchorWizard: {
+        fieldId, targetMode,
+        currentStep: 0,
+        steps: WIZARD_STEPS[targetMode],
+        completedAnchors: [],
+      },
+    });
+  },
+
+  completeAnchorWizardStep: (region, expectedText) =>
+    set((state) => {
+      const wizard = state.anchorWizard;
+      if (!wizard) return {};
+      const step = wizard.steps[wizard.currentStep];
+      const newAnchor: Anchor = {
+        id: crypto.randomUUID(),
+        role: step.role,
+        region,
+        expected_text: expectedText,
+      };
+      const completedAnchors = [...wizard.completedAnchors, newAnchor];
+      const nextStep = wizard.currentStep + 1;
+
+      // If all steps done, finalize: update the field
+      if (nextStep >= wizard.steps.length) {
+        const defaultChains: Record<AnchorMode, () => ChainStep[]> = {
+          static: () => [],
+          single: () => [
+            { id: crypto.randomUUID(), category: 'search', type: 'exact_position' },
+            { id: crypto.randomUUID(), category: 'search', type: 'vertical_slide', slide_tolerance: 0.3 },
+            { id: crypto.randomUUID(), category: 'search', type: 'full_page_search' },
+            { id: crypto.randomUUID(), category: 'value', type: 'offset_value' },
+            { id: crypto.randomUUID(), category: 'value', type: 'adjacent_scan', search_direction: 'right' },
+          ],
+          bracket: () => [
+            { id: crypto.randomUUID(), category: 'search', type: 'bracket_search' },
+            { id: crypto.randomUUID(), category: 'value', type: 'intersection_value' },
+          ],
+          area_value: () => [
+            { id: crypto.randomUUID(), category: 'search', type: 'area_search' },
+            { id: crypto.randomUUID(), category: 'value', type: 'area_text_value' },
+          ],
+          area_locator: () => [
+            { id: crypto.randomUUID(), category: 'search', type: 'area_search' },
+            { id: crypto.randomUUID(), category: 'value', type: 'offset_value' },
+            { id: crypto.randomUUID(), category: 'value', type: 'adjacent_scan', search_direction: 'right' },
+          ],
+          area_bracket: () => [
+            { id: crypto.randomUUID(), category: 'search', type: 'area_search' },
+            { id: crypto.randomUUID(), category: 'value', type: 'intersection_value' },
+          ],
+        };
+
+        const primaryAnchor = completedAnchors.find(a => a.role === 'primary');
+        return {
+          anchorWizard: null,
+          fields: state.fields.map((f) =>
+            f.id === wizard.fieldId
+              ? {
+                  ...f,
+                  type: wizard.targetMode === 'static' ? 'static' as const : 'dynamic' as const,
+                  anchor_mode: wizard.targetMode,
+                  anchors: completedAnchors,
+                  anchor_region: primaryAnchor?.region,
+                  expected_anchor_text: primaryAnchor?.expected_text,
+                  chain: defaultChains[wizard.targetMode](),
+                }
+              : f
+          ),
+        };
+      }
+
+      // More steps to go
+      return {
+        anchorWizard: { ...wizard, currentStep: nextStep, completedAnchors },
+      };
+    }),
+
+  cancelAnchorWizard: () => set({ anchorWizard: null }),
 
   // Comparison mode actions
   setPdfB: (pdfId, pageCount, filename) =>

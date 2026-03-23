@@ -42,6 +42,19 @@ class RuleResult(BaseModel):
 
 # --- Chain step system ---
 
+class LayoutLine(BaseModel):
+    """A single line within a layout block."""
+    text: str
+
+
+class LayoutBlock(BaseModel):
+    """A text block detected by pdfminer's layout analysis."""
+    id: str
+    text: str
+    bbox: dict  # { x, y, width, height } normalized 0-1
+    lines: list[LayoutLine] = []
+
+
 class ChainStep(BaseModel):
     """One step in a configurable chain pipeline."""
     id: str
@@ -50,6 +63,8 @@ class ChainStep(BaseModel):
     # Search step config
     slide_tolerance: float | None = None        # vertical_slide: default 0.3
     search_region: Region | None = None         # region_search: custom search area
+    # Block search/value config
+    block_extract_mode: Literal["same_block", "rest_of_block", "next_block"] | None = None
     # Value step config
     search_direction: str | None = None         # adjacent_scan: "right" or "below"
     # Validate step config (mirrors Rule fields)
@@ -74,16 +89,30 @@ class StepTrace(BaseModel):
     region: Region | None = None
 
 
+class Anchor(BaseModel):
+    """A named anchor point used to locate a field's value."""
+    id: str
+    role: Literal["primary", "secondary", "area_top", "area_bottom"]
+    region: Region
+    expected_text: str
+
+
 class Field(BaseModel):
     """A labeled extraction field in a template."""
     id: str
     label: str
     type: Literal["static", "dynamic"]
+    # Anchor tier: static (no anchors), single (1), bracket (2 intersection),
+    # area_value (2 area boundaries = value between), area_locator (2 area + 1 locator),
+    # area_bracket (2 area + 2 bracket intersection inside area)
+    anchor_mode: Literal["static", "single", "bracket", "area_value", "area_locator", "area_bracket"] = "static"
+    # Structured anchors list (new system)
+    anchors: list[Anchor] = []
     # Static fields: just a value_region
     # Dynamic fields: anchor_region + value_region + expected_anchor_text
     value_region: Region
-    anchor_region: Region | None = None         # Only for dynamic fields
-    expected_anchor_text: str | None = None      # Only for dynamic fields
+    anchor_region: Region | None = None         # Legacy: single anchor region
+    expected_anchor_text: str | None = None      # Legacy: single anchor text
     rules: list[Rule] = []
     # Auto-detected format of the value from the template PDF
     # Used to find the right value when anchor is relocated

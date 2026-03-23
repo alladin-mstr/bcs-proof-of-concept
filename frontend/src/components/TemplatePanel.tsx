@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useAppStore } from '../store/appStore';
 import {
   createTemplate,
@@ -7,7 +8,6 @@ import {
   deleteTemplate as apiDeleteTemplate,
   testExtraction,
 } from '../api/client';
-import RulesEditor from './RulesEditor';
 import ChainEditor from './ChainEditor';
 import ComparisonFieldsPanel from './ComparisonFieldsPanel';
 
@@ -24,9 +24,6 @@ export default function TemplatePanel() {
   const currentPageB = useAppStore((s) => s.currentPageB);
   const setExtractionResults = useAppStore((s) => s.setExtractionResults);
   const removeField = useAppStore((s) => s.removeField);
-  const drawMode = useAppStore((s) => s.drawMode);
-  const setDrawMode = useAppStore((s) => s.setDrawMode);
-  const pendingAnchor = useAppStore((s) => s.pendingAnchor);
   const setPendingAnchor = useAppStore((s) => s.setPendingAnchor);
   const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
   const editingFieldId = useAppStore((s) => s.editingFieldId);
@@ -258,54 +255,6 @@ export default function TemplatePanel() {
         </div>
       )}
 
-      {/* Draw mode toggle — only in create/edit mode */}
-      {canEditFields && (
-        <div className="p-3 border-b border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Draw Mode
-          </p>
-          <div className="flex rounded-lg overflow-hidden border border-gray-200">
-            <button
-              onClick={() => setDrawMode('static')}
-              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                drawMode === 'static'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              Static
-            </button>
-            <button
-              onClick={() => setDrawMode('dynamic')}
-              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                drawMode === 'dynamic'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              Dynamic
-            </button>
-          </div>
-
-          {pendingAnchor && (
-            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-xs text-amber-800 font-medium">
-                Now draw the value region for this field
-              </p>
-              <p className="text-xs text-amber-600 mt-0.5">
-                Anchor: &quot;{pendingAnchor.expectedText}&quot;
-              </p>
-              <button
-                onClick={() => setPendingAnchor(null)}
-                className="mt-1.5 text-xs text-amber-700 underline hover:text-amber-900"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Fields header + comparison tab switcher */}
       <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -369,10 +318,16 @@ export default function TemplatePanel() {
               <div className="flex items-center justify-between px-3 py-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className={`inline-flex items-center justify-center w-4 h-4 rounded text-[10px] font-bold ${
-                      field.type === 'static' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                    <span className={`inline-flex items-center justify-center px-1 h-4 rounded text-[10px] font-bold ${
+                      { static: 'bg-blue-100 text-blue-700',
+                        single: 'bg-amber-100 text-amber-700',
+                        bracket: 'bg-orange-100 text-orange-700',
+                        area_value: 'bg-green-100 text-green-700',
+                        area_locator: 'bg-green-100 text-green-700',
+                        area_bracket: 'bg-green-100 text-green-700',
+                      }[field.anchor_mode ?? (field.type === 'dynamic' ? 'single' : 'static')]
                     }`}>
-                      {field.type === 'static' ? 'S' : 'D'}
+                      {{ static: 'S', single: '1', bracket: 'B', area_value: 'AV', area_locator: 'AL', area_bracket: 'AB' }[field.anchor_mode ?? (field.type === 'dynamic' ? 'single' : 'static')]}
                     </span>
                     {renamingFieldId === field.id ? (
                       <input
@@ -421,7 +376,12 @@ export default function TemplatePanel() {
                   </div>
                   <div className="mt-0.5 text-gray-400">
                     Page {field.value_region.page}
-                    {field.type === 'dynamic' && field.expected_anchor_text && (
+                    {field.anchors?.length > 0 && (
+                      <span className="ml-1 text-amber-500">
+                        | {field.anchors.map(a => `"${a.expected_text}"`).join(' × ')}
+                      </span>
+                    )}
+                    {!field.anchors?.length && field.type === 'dynamic' && field.expected_anchor_text && (
                       <span className="ml-1 text-amber-500">
                         | &quot;{field.expected_anchor_text}&quot;
                       </span>
@@ -458,10 +418,24 @@ export default function TemplatePanel() {
               </div>
               {canEditFields && expandedFieldId === field.id && (
                 <div className="px-3 pb-2 border-t border-gray-100 pt-1.5">
-                  <ChainEditor field={field} />
-                  {(!field.chain || field.chain.length === 0) && (
-                    <RulesEditor field={field} />
+                  {/* Anchor info */}
+                  {(field.anchors?.length > 0) && (
+                    <div className="mb-1.5">
+                      {field.anchors.map((a) => (
+                        <div key={a.id} className="text-[10px] text-gray-500 flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            a.role === 'area_top' || a.role === 'area_bottom' ? 'bg-green-400' :
+                            a.role === 'secondary' ? 'bg-orange-400' : 'bg-amber-400'
+                          }`} />
+                          <span className="text-gray-400">{a.role}:</span>
+                          <span className="truncate">&quot;{a.expected_text}&quot;</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
+                  {/* Add/change anchor button */}
+                  <AnchorTierSelector fieldId={field.id} currentMode={field.anchor_mode ?? (field.type === 'dynamic' ? 'single' : 'static')} />
+                  <ChainEditor field={field} />
                 </div>
               )}
             </div>
@@ -569,6 +543,148 @@ export default function TemplatePanel() {
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+import type { AnchorMode } from '../types';
+
+const ANCHOR_MODES: { mode: AnchorMode; label: string; icon: string; desc: string; tooltip: string }[] = [
+  {
+    mode: 'static', label: 'Static', icon: '▢',
+    desc: 'Fixed position, no anchor',
+    tooltip: 'Value is extracted from a fixed rectangle on the page. Use for content that never moves (company name, logo area, headers).',
+  },
+  {
+    mode: 'single', label: 'Single Anchor', icon: '⊕',
+    desc: '1 anchor + fixed offset to value',
+    tooltip: 'One anchor text (e.g., "Total:") locates itself on the page. The value is extracted at a fixed distance from the anchor.\n\n  [anchor] ──fixed──▶ [value]\n\nIf the anchor shifts, the value follows.',
+  },
+  {
+    mode: 'bracket', label: 'Bracket', icon: '⊞',
+    desc: '2 anchors intersect (column × row)',
+    tooltip: 'Two anchors form an intersection — one defines the column (e.g., "Amount" header), the other defines the row (e.g., "Regular Pay"). The value is at their crosspoint.\n\n       [Amount]\n          |\n  [Regular Pay] ──┼──▶ $4,200\n\nLike reading a table cell by its column and row headers.',
+  },
+  {
+    mode: 'area_value', label: 'Area Value', icon: '⬚',
+    desc: 'All text between two boundaries',
+    tooltip: 'Two anchors mark the top and bottom boundaries of a region. Everything between them IS the value — handles variable-length content.\n\n  [Description:]  ← top anchor\n  ┌─────────────┐\n  │ Line 1...   │\n  │ Line 2...   │  ← value = all text here\n  │ Line 3...   │\n  └─────────────┘\n  [Subtotal:]     ← bottom anchor\n\n1 line or 10 lines, it captures all of them.',
+  },
+  {
+    mode: 'area_locator', label: 'Area + Locator', icon: '⬚⊕',
+    desc: 'Area boundaries + locator inside',
+    tooltip: 'Two anchors define a search area (e.g., "EARNINGS" to "Gross Pay:"). A third anchor locates the value inside that area.\n\n  [EARNINGS]        ← area top\n  ┌───────────────┐\n  │ [Pay:] → $val │  ← locator + value\n  └───────────────┘\n  [Gross Pay:]      ← area bottom\n\nSolves ambiguity when the same label exists in multiple sections.',
+  },
+  {
+    mode: 'area_bracket', label: 'Area + Bracket', icon: '⬚⊞',
+    desc: 'Area + column × row inside',
+    tooltip: 'Two area anchors scope to a section, then two bracket anchors intersect inside it.\n\n  [DEDUCTIONS]        ← area top\n  ┌──────────────────┐\n  │      [Amount]     │  ← column anchor\n  │         |         │\n  │ [Fed Tax] ─┼─ $747│  ← row anchor × value\n  └──────────────────┘\n  [Total Deductions:]  ← area bottom\n\nThe most precise option — handles duplicate labels across sections AND table cells.',
+  },
+];
+
+function AnchorTierSelector({ fieldId, currentMode }: { fieldId: string; currentMode: AnchorMode }) {
+  const [open, setOpen] = useState(false);
+  const [hoveredMode, setHoveredMode] = useState<AnchorMode | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const startAnchorWizard = useAppStore((s) => s.startAnchorWizard);
+  const anchorWizard = useAppStore((s) => s.anchorWizard);
+
+  const handleRowHover = useCallback((mode: AnchorMode | null, e?: React.MouseEvent) => {
+    setHoveredMode(mode);
+    if (mode && e) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setTooltipPos({ top: rect.top, left: rect.right + 8 });
+    } else {
+      setTooltipPos(null);
+    }
+  }, []);
+
+  // Don't show selector if wizard is active for this field
+  if (anchorWizard?.fieldId === fieldId) {
+    const step = anchorWizard.steps[anchorWizard.currentStep];
+    return (
+      <div className="mb-1.5 p-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px]">
+        <p className="text-amber-800 font-medium">
+          Step {anchorWizard.currentStep + 1}/{anchorWizard.steps.length}
+        </p>
+        <p className="text-amber-600">{step.prompt}</p>
+        <button
+          onClick={(e) => { e.stopPropagation(); useAppStore.getState().cancelAnchorWizard(); }}
+          className="mt-1 text-amber-700 underline hover:text-amber-900"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  const handleSelect = (mode: AnchorMode) => {
+    setOpen(false);
+    setHoveredMode(null);
+    setTooltipPos(null);
+    // Always clear previous anchors/chain before switching
+    const state = useAppStore.getState();
+    useAppStore.setState({
+      fields: state.fields.map(f =>
+        f.id === fieldId
+          ? { ...f, type: mode === 'static' ? 'static' as const : 'dynamic' as const, anchor_mode: mode, anchors: [], anchor_region: undefined, expected_anchor_text: undefined, chain: [] }
+          : f
+      ),
+    });
+    if (mode !== 'static') {
+      setTimeout(() => startAnchorWizard(fieldId, mode), 0);
+    }
+  };
+
+  const hoveredInfo = hoveredMode ? ANCHOR_MODES.find(m => m.mode === hoveredMode) : null;
+
+  return (
+    <div className="mb-1.5" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+      >
+        + Anchor
+      </button>
+      {open && (
+        <div ref={dropdownRef} className="mt-1 bg-white rounded-lg border border-gray-200 shadow-lg p-1.5 space-y-0.5">
+          {ANCHOR_MODES.map(({ mode, label, icon, desc }) => {
+            const isActive = mode === currentMode;
+            return (
+              <button
+                key={mode}
+                onClick={() => handleSelect(mode)}
+                onMouseEnter={(e) => handleRowHover(mode, e)}
+                onMouseLeave={() => handleRowHover(null)}
+                className={`w-full text-left px-2 py-1.5 rounded transition-colors flex items-start gap-2 ${
+                  isActive ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50'
+                }`}
+              >
+                <span className="text-[13px] leading-none mt-0.5 w-5 text-center flex-shrink-0">{icon}</span>
+                <div className="min-w-0">
+                  <span className={`text-[11px] font-semibold ${isActive ? 'text-blue-700' : 'text-gray-700'}`}>{label}</span>
+                  <p className="text-[9px] text-gray-400 leading-tight mt-0.5">{desc}</p>
+                </div>
+                {isActive && (
+                  <span className="text-[9px] text-blue-500 font-medium ml-auto flex-shrink-0 mt-0.5">current</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {/* Portal tooltip — renders outside sidebar overflow */}
+      {hoveredInfo && tooltipPos && createPortal(
+        <div
+          className="fixed w-60 bg-gray-900 text-white rounded-lg p-3 shadow-xl pointer-events-none"
+          style={{ top: tooltipPos.top, left: tooltipPos.left, zIndex: 9999 }}
+        >
+          <p className="text-[11px] font-semibold mb-1.5">{hoveredInfo.label}</p>
+          <pre className="text-[9px] leading-relaxed whitespace-pre-wrap font-mono text-gray-300">{hoveredInfo.tooltip}</pre>
+        </div>,
+        document.body,
       )}
     </div>
   );
