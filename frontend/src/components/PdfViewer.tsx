@@ -13,6 +13,7 @@ export const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 
 export default function PdfViewer() {
   const pdfId = useAppStore((s) => s.pdfId);
+  const currentPage = useAppStore((s) => s.currentPage);
   const zoomIndex = useAppStore((s) => s.zoomIndex);
   const showMarkers = useAppStore((s) => s.showMarkers);
 
