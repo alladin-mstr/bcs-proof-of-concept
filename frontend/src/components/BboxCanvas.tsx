@@ -561,19 +561,19 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
   const isDraggingValue = valueDragOffset.dx !== 0 || valueDragOffset.dy !== 0;
   const isDraggingAnchor = anchorDragOffset.dx !== 0 || anchorDragOffset.dy !== 0;
 
-  // Actual value position (from adjacent scan or offset)
+  // Actual value position (from adjacent scan, intersection, or offset)
   let actualVx: number | null = null;
   let actualVy: number | null = null;
   let actualVw: number | null = null;
-  if (isShifted && vPos && vDim) {
+  if (vPos && vDim) {
     if (hasFoundValue) {
-      // Adjacent scan found value at exact position
+      // Value found at exact position (adjacent scan, intersection, etc.)
       const fp = normalizedToPixel(result.value_found_x!, result.value_found_y!, pw, ph);
       actualVx = fp.x;
       actualVy = fp.y;
       actualVw = result.value_found_width ? result.value_found_width * pw : vDim.x;
-    } else {
-      // Offset-based
+    } else if (isShifted) {
+      // Offset-based shift
       actualVx = vPos.x + shiftX;
       actualVy = vPos.y + shiftY;
       actualVw = vDim.x;
@@ -707,9 +707,18 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
             const areaTop = field.anchors.find(a => a.role === 'area_top' && a.region.page === currentPage);
             const areaBottom = field.anchors.find(a => a.role === 'area_bottom' && a.region.page === currentPage);
             if (!areaTop || !areaBottom) return null;
-            const topPos = normalizedToPixel(areaTop.region.x, areaTop.region.y, pw, ph);
-            const topDim = normalizedToPixel(areaTop.region.width, areaTop.region.height, pw, ph);
-            const bottomPos = normalizedToPixel(areaBottom.region.x, areaBottom.region.y, pw, ph);
+            // Use found positions if available, otherwise template positions
+            const foundTop = hasResult && result.anchors_found?.['area_top'];
+            const foundBottom = hasResult && result.anchors_found?.['area_bottom'];
+            const topPos = foundTop
+              ? normalizedToPixel(foundTop.x, foundTop.y, pw, ph)
+              : normalizedToPixel(areaTop.region.x, areaTop.region.y, pw, ph);
+            const topDim = foundTop
+              ? normalizedToPixel(foundTop.width, foundTop.height, pw, ph)
+              : normalizedToPixel(areaTop.region.width, areaTop.region.height, pw, ph);
+            const bottomPos = foundBottom
+              ? normalizedToPixel(foundBottom.x, foundBottom.y, pw, ph)
+              : normalizedToPixel(areaBottom.region.x, areaBottom.region.y, pw, ph);
             // Use value box x-range for horizontal constraint, full width as fallback
             const vr = field.value_region;
             const vrPos = normalizedToPixel(vr.x, vr.y, pw, ph);
@@ -742,6 +751,46 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
                 ? { fill: 'rgba(249,115,22,0.2)', stroke: 'rgb(249,115,22)', label: 'rgb(249,115,22)' }
                 : { fill: 'rgba(245,158,11,0.2)', stroke: 'rgb(245,158,11)', label: 'rgb(245,158,11)' };
             const labelText = anchor.expected_text;
+
+            // Check if backend returned a found position for this anchor
+            const foundPos = hasResult && result.anchors_found?.[anchor.role];
+            if (foundPos) {
+              // Anchor was found at a different position — show ghost at original, anchor at found
+              const fp = normalizedToPixel(foundPos.x, foundPos.y, pw, ph);
+              const fd = normalizedToPixel(foundPos.width, foundPos.height, pw, ph);
+              const foundLabelWidth = Math.max(fd.x, labelText.length * 6.5 + 24);
+              const origLabelWidth = Math.max(ad.x, labelText.length * 6.5 + 24);
+              return (
+                <g key={anchor.id}>
+                  {/* Ghost: original template position in gray */}
+                  <rect x={ap.x} y={ap.y} width={ad.x} height={ad.y}
+                    fill={COLORS.ghost.fill} stroke={COLORS.ghost.stroke}
+                    strokeWidth={1} strokeDasharray="4 2" rx={2} />
+                  <rect x={ap.x} y={ap.y - 16} width={origLabelWidth} height={16}
+                    fill="rgba(156,163,175,0.5)" rx={2} />
+                  <AnchorIcon x={ap.x + 1} y={ap.y - 14} />
+                  <text x={ap.x + 14} y={ap.y - 3} fill="rgba(255,255,255,0.7)" fontSize={9} fontWeight={600} fontFamily="system-ui, sans-serif">
+                    {labelText}
+                  </text>
+                  {/* Found position: anchor at where it was actually found */}
+                  <rect x={fp.x} y={fp.y} width={fd.x} height={fd.y}
+                    fill={anchorColor.fill} stroke={anchorColor.stroke}
+                    strokeWidth={2} strokeDasharray={isArea ? '6 3' : undefined} rx={2} />
+                  <rect x={fp.x} y={fp.y - 16} width={foundLabelWidth} height={16}
+                    fill={anchorColor.stroke} rx={2} />
+                  <AnchorIcon x={fp.x + 1} y={fp.y - 14} />
+                  <text x={fp.x + 14} y={fp.y - 3} fill="white" fontSize={9} fontWeight={600} fontFamily="system-ui, sans-serif">
+                    {labelText}
+                  </text>
+                  <text x={fp.x + foundLabelWidth - 3} y={fp.y - 3} fill="rgba(255,255,255,0.6)" fontSize={7} fontWeight={500}
+                    fontFamily="system-ui, sans-serif" textAnchor="end">
+                    {anchor.role}
+                  </text>
+                </g>
+              );
+            }
+
+            // No found position — render at template position as before
             const labelWidth = Math.max(ad.x, labelText.length * 6.5 + 24);
             return (
               <g key={anchor.id}>
@@ -763,21 +812,37 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
           })}
 
           {vPos && vDim && (() => {
-            const labelBarWidth = Math.max(vDim.x, field.label.length * 8 + (hasResult ? 36 : 16));
+            // When value was found at a different position, show ghost at original and render at found position
+            const showFoundValue = hasFoundValue && actualVx != null && actualVy != null && !isShifted;
+            const drawVx = showFoundValue ? actualVx! : vPos.x;
+            const drawVy = showFoundValue ? actualVy! : vPos.y;
+            const drawVw = showFoundValue ? (actualVw ?? vDim.x) : vDim.x;
+            const drawVh = vDim.y;
+            const labelBarWidth = Math.max(drawVw, field.label.length * 8 + (hasResult ? 36 : 16));
             return (
             <>
-              <rect data-field-value={field.id} x={vPos.x} y={vPos.y} width={vDim.x} height={vDim.y}
+              {/* Ghost: original value position in gray (only when value was found elsewhere) */}
+              {showFoundValue && (
+                <>
+                  <rect x={vPos.x} y={vPos.y} width={vDim.x} height={vDim.y}
+                    fill={COLORS.ghost.fill} stroke={COLORS.ghost.stroke}
+                    strokeWidth={1} strokeDasharray="4 2" rx={2} />
+                  <text x={vPos.x + 3} y={vPos.y - 3} fill="rgba(156,163,175,0.5)" fontSize={9}
+                    fontWeight={500} fontFamily="system-ui, sans-serif">{field.label} (original)</text>
+                </>
+              )}
+              <rect data-field-value={field.id} x={drawVx} y={drawVy} width={drawVw} height={drawVh}
                 fill={valueColor.fill}
                 stroke={isDraggingValue ? 'rgb(99,102,241)' : isEditing ? 'rgb(99,102,241)' : valueColor.stroke}
                 strokeWidth={isDraggingValue ? 3 : isEditing ? 3 : hasResult ? 3 : 2}
                 strokeDasharray={isDraggingValue ? '4 2' : isEditing ? '6 3' : undefined} rx={2} />
               {/* Label bar */}
-              <rect x={vPos.x} y={vPos.y - 20}
+              <rect x={drawVx} y={drawVy - 20}
                 width={labelBarWidth} height={20}
                 fill={isEditing ? 'rgb(99,102,241)' : valueColor.stroke} rx={2} />
               {/* Inline label editing */}
               {editingLabel ? (
-                <foreignObject x={vPos.x} y={vPos.y - 20}
+                <foreignObject x={drawVx} y={drawVy - 20}
                   width={Math.max(labelBarWidth, 160)} height={20}>
                   <input
                     ref={labelInputRef}
@@ -798,13 +863,13 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
                   />
                 </foreignObject>
               ) : (
-                <text x={vPos.x + 4} y={vPos.y - 5} fill="white" fontSize={12} fontWeight={600} fontFamily="system-ui, sans-serif"
+                <text x={drawVx + 4} y={drawVy - 5} fill="white" fontSize={12} fontWeight={600} fontFamily="system-ui, sans-serif"
                   style={{ pointerEvents: 'none' }}>
                   {field.label}
                 </text>
               )}
               {hasResult && !editingLabel && (
-                <text x={vPos.x + field.label.length * 8 + 12} y={vPos.y - 5} fill="white" fontSize={12} fontWeight={700} fontFamily="system-ui, sans-serif">
+                <text x={drawVx + field.label.length * 8 + 12} y={drawVy - 5} fill="white" fontSize={12} fontWeight={700} fontFamily="system-ui, sans-serif">
                   {result.status === 'ok' || result.status === 'anchor_shifted' ? '\u2713' : result.status === 'empty' ? '\u2014' : '\u2717'}
                 </text>
               )}
@@ -812,8 +877,8 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
               {onUpdateLabel && !editingLabel && (
                 <g className="opacity-0 group-hover:opacity-100 cursor-pointer"
                   onClick={startLabelEdit}>
-                  <circle cx={vPos.x + labelBarWidth + 12} cy={vPos.y - 10} r={9} fill="rgb(99,102,241)" />
-                  <g transform={`translate(${vPos.x + labelBarWidth + 5.5}, ${vPos.y - 16.5})`}>
+                  <circle cx={drawVx + labelBarWidth + 12} cy={drawVy - 10} r={9} fill="rgb(99,102,241)" />
+                  <g transform={`translate(${drawVx + labelBarWidth + 5.5}, ${drawVy - 16.5})`}>
                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" transform="scale(0.54)" />
                     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" transform="scale(0.54)" />
                   </g>
@@ -821,21 +886,21 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
               )}
               {/* Drag handle for value */}
               {onStartDrag && (
-                <rect x={vPos.x} y={vPos.y} width={vDim.x} height={vDim.y}
+                <rect x={drawVx} y={drawVy} width={drawVw} height={drawVh}
                   fill="transparent" style={{ cursor: 'move' }} rx={2}
                   onMouseDown={(e) => onStartDrag(field.id, 'value', e)} />
               )}
               {/* Delete icon on hover */}
               <g className="opacity-0 group-hover:opacity-100 cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); onRemove(); }}>
-                <circle cx={vPos.x + vDim.x - 8} cy={vPos.y - 10} r={8} fill="rgb(239,68,68)" />
-                <text x={vPos.x + vDim.x - 8} y={vPos.y - 6} fill="white" fontSize={12}
+                <circle cx={drawVx + drawVw - 8} cy={drawVy - 10} r={8} fill="rgb(239,68,68)" />
+                <text x={drawVx + drawVw - 8} y={drawVy - 6} fill="white" fontSize={12}
                   fontWeight={700} textAnchor="middle" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none' }}>x</text>
               </g>
               {/* Connection node for comparison mode — on the outer side edge */}
               {isComparisonMode && canEdit && (() => {
-                const nodeX = source === 'a' ? vPos.x + vDim.x : vPos.x;
-                const nodeY = vPos.y + vDim.y / 2;
+                const nodeX = source === 'a' ? drawVx + drawVw : drawVx;
+                const nodeY = drawVy + drawVh / 2;
                 return (
                   <g data-connect-node={field.id} style={{ cursor: 'crosshair' }}
                     onMouseDown={(e) => {

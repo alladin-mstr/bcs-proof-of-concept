@@ -454,6 +454,7 @@ def extract_all_fields(pdf_path: str, fields: list[Field], pdf_path_b: str | Non
                 "value_found_x": resolved.get("value_found_x"),
                 "value_found_y": resolved.get("value_found_y"),
                 "value_found_width": resolved.get("value_found_width"),
+                "anchors_found": resolved.get("anchors_found", {}),
                 "step_traces": resolved.get("step_traces", []),
                 "uses_chain": True,
             })
@@ -472,6 +473,7 @@ def extract_all_fields(pdf_path: str, fields: list[Field], pdf_path_b: str | Non
                 "value_found_x": None,
                 "value_found_y": None,
                 "value_found_width": None,
+                "anchors_found": {},
                 "step_traces": [],
                 "uses_chain": False,
             })
@@ -490,6 +492,7 @@ def extract_all_fields(pdf_path: str, fields: list[Field], pdf_path_b: str | Non
                 "value_found_x": resolved.get("value_found_x"),
                 "value_found_y": resolved.get("value_found_y"),
                 "value_found_width": resolved.get("value_found_width"),
+                "anchors_found": {},
                 "step_traces": [],
                 "uses_chain": False,
             })
@@ -540,6 +543,7 @@ def extract_all_fields(pdf_path: str, fields: list[Field], pdf_path_b: str | Non
             value_found_x=entry["value_found_x"],
             value_found_y=entry["value_found_y"],
             value_found_width=entry["value_found_width"],
+            anchors_found=entry.get("anchors_found", {}),
             rule_results=rule_results,
             step_traces=step_traces,
         ))

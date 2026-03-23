@@ -170,6 +170,8 @@ class FieldResult(BaseModel):
     value_found_x: float | None = None
     value_found_y: float | None = None
     value_found_width: float | None = None
+    # Found anchor positions: role → {x, y, text, width, height} (normalized)
+    anchors_found: dict[str, dict] = {}
     rule_results: list[RuleResult] = []
     step_traces: list[StepTrace] = []
 

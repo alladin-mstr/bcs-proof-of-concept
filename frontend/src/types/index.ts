@@ -114,6 +114,8 @@ export interface FieldResult {
   value_found_x?: number;
   value_found_y?: number;
   value_found_width?: number;
+  // Found anchor positions: role → {x, y, text, width, height} (normalized)
+  anchors_found?: Record<string, { x: number; y: number; text: string; width: number; height: number }>;
   rule_results: RuleResult[];
   step_traces: StepTrace[];
 }

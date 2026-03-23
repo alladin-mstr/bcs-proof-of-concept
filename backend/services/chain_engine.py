@@ -798,5 +798,6 @@ def execute_field_chain(pdf_path: str, field: Field, all_values: dict[str, str] 
         "value_found_x": ctx.value_found_x,
         "value_found_y": ctx.value_found_y,
         "value_found_width": ctx.value_found_width,
+        "anchors_found": ctx.anchors_found if ctx.anchors_found else {},
         "step_traces": ctx.step_traces,
     }

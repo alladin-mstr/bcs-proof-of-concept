@@ -93,6 +93,15 @@ interface AppState {
   setTemplateMode: (mode: "single" | "comparison") => void;
   setCurrentPageB: (page: number) => void;
 
+  // Zoom & markers (shared between header toolbar and PdfViewer)
+  zoomIndex: number;
+  showMarkers: boolean;
+  setZoomIndex: (index: number) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetZoom: () => void;
+  setShowMarkers: (show: boolean) => void;
+
   // Connection drag state (for drag-to-connect on PDF canvas)
   connectDragFrom: { fieldId: string; source: 'a' | 'b' } | null;
   connectDragMouse: { x: number; y: number } | null; // screen coords
@@ -396,6 +405,15 @@ export const useAppStore = create<AppState>((set) => ({
   setTemplateMode: (mode) => set({ templateMode: mode }),
 
   setCurrentPageB: (page) => set({ currentPageB: page }),
+
+  // Zoom & markers
+  zoomIndex: 2, // Default: 100% (index into ZOOM_LEVELS)
+  showMarkers: true,
+  setZoomIndex: (index) => set({ zoomIndex: index }),
+  zoomIn: () => set((s) => ({ zoomIndex: Math.min(s.zoomIndex + 1, 7) })),
+  zoomOut: () => set((s) => ({ zoomIndex: Math.max(s.zoomIndex - 1, 0) })),
+  resetZoom: () => set({ zoomIndex: 2 }),
+  setShowMarkers: (show) => set({ showMarkers: show }),
 
   // Connection drag state
   connectDragFrom: null,

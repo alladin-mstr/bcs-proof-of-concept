@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from './store/appStore';
 import { listPdfs, deletePdf, uploadPdf, type PdfInfo } from './api/client';
-import PdfViewer from './components/PdfViewer';
+import PdfViewer, { ZOOM_LEVELS } from './components/PdfViewer';
 import ComparisonCanvas from './components/ComparisonCanvas';
 import TemplatePanel from './components/TemplatePanel';
 import ExtractionResults from './components/ExtractionResults';
@@ -13,6 +13,16 @@ function App() {
   const extractionResults = useAppStore((s) => s.extractionResults);
   const setExtractionResults = useAppStore((s) => s.setExtractionResults);
   const templateMode = useAppStore((s) => s.templateMode);
+
+  const pageCount = useAppStore((s) => s.pageCount);
+  const currentPage = useAppStore((s) => s.currentPage);
+  const setCurrentPage = useAppStore((s) => s.setCurrentPage);
+  const zoomIndex = useAppStore((s) => s.zoomIndex);
+  const zoomIn = useAppStore((s) => s.zoomIn);
+  const zoomOut = useAppStore((s) => s.zoomOut);
+  const resetZoom = useAppStore((s) => s.resetZoom);
+  const showMarkers = useAppStore((s) => s.showMarkers);
+  const setShowMarkers = useAppStore((s) => s.setShowMarkers);
 
   const [showFiles, setShowFiles] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -58,6 +68,87 @@ function App() {
               </span>
             )}
           </div>
+
+          {/* Page / Zoom / Markers toolbar — only when a PDF is loaded */}
+          {pdfId && (
+            <div className="flex items-center gap-1 bg-gray-50 rounded-lg border border-gray-200 px-1.5 py-1">
+              {/* Page navigation */}
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage <= 1}
+                className="p-1 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Previous page"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <span className="text-xs text-gray-600 font-medium min-w-[48px] text-center">
+                {currentPage} / {pageCount}
+              </span>
+              <button
+                onClick={() => setCurrentPage(Math.min(pageCount, currentPage + 1))}
+                disabled={currentPage >= pageCount}
+                className="p-1 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Next page"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+              {/* Zoom controls */}
+              <button
+                onClick={zoomOut}
+                disabled={zoomIndex <= 0}
+                className="p-1 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Zoom out"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                </svg>
+              </button>
+              <button
+                onClick={resetZoom}
+                className="text-[10px] font-medium text-gray-600 hover:text-gray-800 px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors min-w-[40px] text-center"
+                title="Reset zoom"
+              >
+                {Math.round(ZOOM_LEVELS[zoomIndex] * 100)}%
+              </button>
+              <button
+                onClick={zoomIn}
+                disabled={zoomIndex >= ZOOM_LEVELS.length - 1}
+                className="p-1 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Zoom in"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+
+              <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+              {/* Toggle markers */}
+              <button
+                onClick={() => setShowMarkers(!showMarkers)}
+                className={`p-1 rounded transition-colors ${
+                  showMarkers ? 'text-blue-600 hover:text-blue-800 bg-blue-50' : 'text-gray-400 hover:text-gray-600'
+                }`}
+                title={showMarkers ? 'Hide markers' : 'Show markers'}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {showMarkers ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878l4.242 4.242M15.12 15.12L21 21" />
+                  )}
+                </svg>
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center gap-2 relative">
             <button
               onClick={() => setShowFiles(!showFiles)}
