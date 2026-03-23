@@ -474,7 +474,7 @@ class Anchor(BaseModel):
 - `bracket_search` (search): Finds two anchors using word-level positioning (`search_anchor_word_position`), stores both in `ChainContext.anchors_found`
 - `area_search` (search): Finds area_top + area_bottom boundaries, computes bounded region, optionally finds primary/secondary inside the area
 - `intersection_value` (value): Extracts text at the intersection of primary's x (column) and secondary's y (row)
-- `area_text_value` (value): Extracts ALL text between area_top bottom edge and area_bottom top edge
+- `area_text_value` (value): Extracts ALL text between area_top bottom edge and area_bottom top edge, horizontally constrained to the value box's x-range (handles side-by-side columns like "Bill To" / "Ship To")
 
 **Word-level search (`search_anchor_word_position`):** Unlike `search_anchor_fullpage` which returns line-start positions, this finds the exact position of matching word sequences. Critical for bracket intersection — "Amount" header must return x≈0.69, not the x of "Description" at the start of the same line.
 
@@ -489,13 +489,13 @@ class Anchor(BaseModel):
 
 ### Frontend UX
 
-**Anchor wizard:** Guided multi-step drawing flow. Each tier defines a sequence of steps (e.g., bracket = "Draw column header" → "Draw row label"). Banner on PDF shows current step. Completed anchors render as colored boxes during the wizard.
+**Anchor wizard:** Guided multi-step drawing flow. Each tier defines a sequence of steps (e.g., bracket = "Draw column header" → "Draw row label"). Banner on PDF shows current step. Completed anchors render as colored boxes during the wizard. Anchor text is **auto-extracted** from the drawn region via the `extractRegion` API — no manual typing needed. If the region is empty, the user is prompted to retry.
 
 **AnchorTierSelector:** Dropdown per field with icons, descriptions, and hover tooltips with ASCII art diagrams showing how each mode works. Tooltips render via `createPortal` to avoid sidebar overflow clipping. Selecting a mode clears previous anchors and starts the wizard fresh.
 
-**Anchor visualization on PDF:** Each anchor renders with role-based colors (primary=amber, secondary=orange, area=green dashed). Area modes show a green shaded region spanning full page width between area_top and area_bottom.
+**Anchor visualization on PDF:** Each anchor renders with role-based colors (primary=amber, secondary=orange, area=green dashed). Area modes show a green shaded region between area_top and area_bottom, horizontally constrained to the value box's x-range (not full page width) to correctly scope side-by-side columns.
 
-**Unified Rules & Chain editor:** Removed standalone RulesEditor. The chain editor (renamed "Rules & Chain") is the single place for extraction steps AND validation rules. Validate-category chain steps ARE the rules.
+**Unified Rules & Chain editor:** Removed standalone RulesEditor and the Static/Dynamic draw mode toggle. The chain editor (renamed "Rules & Chain") is the single place for extraction steps AND validation rules. Validate-category chain steps ARE the rules.
 
 **Chain editor improvements:** Icons on each step (⊕ ↕ ◎ ⊞ ⬚ → ✛ etc.), hover tooltips explaining what each step does, conditional step availability based on anchor_mode, config panels showing anchor details for bracket/area steps.
 
@@ -505,3 +505,5 @@ class Anchor(BaseModel):
 17. **Partial word matching** — `"gross" in "gross pay"` matched a single word "Gross" when searching for "gross pay". Fixed by removing the reverse substring check (`sub_norm in norm_expected`) — only `norm_expected in sub_norm` is allowed, requiring the found text to contain the full expected text.
 18. **Column/row anchor swap** — When "Amount" and "Gross Pay:" both exist in the search area, proximity ranking alone could match them to the wrong roles (column vs row). Fixed with `prefer_axis` parameter: column anchors weight x-distance 10x more, row anchors weight y-distance 10x more, so each sticks to its spatial axis.
 19. **Layout overlay tooltip clipped by sidebar** — Tooltip rendered inside the sidebar div which had `overflow-y: auto`. Fixed by rendering tooltips via `createPortal(...)` to `document.body` with `position: fixed`.
+20. **Area text captured adjacent columns** — `area_text_value` used full page width, so "Ship To" area also captured "Bill To" content in side-by-side layouts. Fixed by constraining the extraction region's x-range to the value box's x position and width.
+21. **Anchor wizard required manual text typing** — Users had to type the anchor text when drawing, leading to typos and confusion (entering labels instead of actual PDF text). Fixed by auto-extracting text from the drawn region via the `extractRegion` API.
