@@ -39,5 +39,5 @@ jobs:
         push: true
         tags: acr0bcs0demo.azurecr.io/bcs-demo:latest
         build-args: |
-          VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY=${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
