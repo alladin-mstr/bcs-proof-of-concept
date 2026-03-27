@@ -142,12 +142,22 @@ export default function ExtractionResults({ onClose }: Props) {
         pdf_filename: pdfFilename || 'unknown',
         template_name: activeTemplate?.name,
         template_id: activeTemplateId || undefined,
-        entries: results.map((r) => ({
-          label: r.label,
-          value: r.value,
-          status: r.status,
-          ...(r.table_data ? { table_data: r.table_data } : {}),
-        })),
+        entries: [
+          ...results.map((r) => ({
+            label: r.label,
+            value: r.value,
+            status: r.status,
+            ...(r.table_data ? { table_data: r.table_data } : {}),
+          })),
+          // Include computed values from rules (named outputs)
+          ...Object.entries(computedValues)
+            .filter(([label]) => !results.some((r) => r.label === label))
+            .map(([label, value]) => ({
+              label,
+              value,
+              status: 'computed',
+            })),
+        ],
       });
       addSavedTestRun(run);
       const allRuns = await listTestRuns();

@@ -95,17 +95,6 @@ export function serializeGraph(
   for (const node of nodes) {
     const data = node.data as RuleNodeData;
 
-    // Field inputs with an outputLabel become named computed fields (aliases for cross-template referencing)
-    if (node.type === 'field_input' && data.outputLabel) {
-      computedFields.push({
-        id: node.id,
-        label: data.outputLabel,
-        template_id: templateId,
-        rule_id: node.id,
-        datatype: data.literalDatatype,
-      });
-    }
-
     if (node.type === 'comparison') {
       const { a, b } = getTwoOperands(nodes, edges, node.id);
       if (!a) continue;
@@ -306,14 +295,14 @@ export function serializeGraph(
     }
 
     if (node.type === 'condition') {
-      // 1 input handle "test" — a comparison (or any node)
-      // 2 output handles "true" / "false" — follow edges to find the then/else values
+      // 3 input handles: "test" (condition), "true_val" (then value), "false_val" (else value)
+      // 1 output handle: "result"
       const condSource = sourceNode(nodes, edges, node.id, 'test');
 
-      const trueTarget = outgoingTarget(nodes, edges, node.id, 'true');
-      const falseTarget = outgoingTarget(nodes, edges, node.id, 'false');
-      const thenOp = operandFromNode(trueTarget);
-      const elseOp = operandFromNode(falseTarget);
+      const trueSource = sourceNode(nodes, edges, node.id, 'true_val');
+      const falseSource = sourceNode(nodes, edges, node.id, 'false_val');
+      const thenOp = operandFromNode(trueSource);
+      const elseOp = operandFromNode(falseSource);
 
       // Build the inline Condition from the connected comparison node
       let condition: Condition | null = null;

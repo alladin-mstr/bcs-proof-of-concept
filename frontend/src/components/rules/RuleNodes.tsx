@@ -64,7 +64,17 @@ function EditableName({ id, name, textClass }: { id: string; name?: string; text
     );
   }
 
-  if (!name) return null;
+  if (!name) {
+    return (
+      <div
+        className={`${textClass} cursor-text opacity-40 hover:opacity-70 truncate text-center italic text-[9px]`}
+        onDoubleClick={() => { setDraft(''); setEditing(true); }}
+        title="Double-click to name"
+      >
+        name...
+      </div>
+    );
+  }
 
   return (
     <div
@@ -79,7 +89,7 @@ function EditableName({ id, name, textClass }: { id: string; name?: string; text
 
 /* ── Field Input ── */
 
-export const FieldInputNode = memo(({ id, data }: NodeProps & { data: RuleNodeData }) => {
+export const FieldInputNode = memo(({ data }: NodeProps & { data: RuleNodeData }) => {
   const dt = data.fieldRef?.resolution ? 'cross-template' : 'local';
   const isTable = data.fieldType === 'table';
   const [showPreview, setShowPreview] = useState(false);
@@ -112,7 +122,6 @@ export const FieldInputNode = memo(({ id, data }: NodeProps & { data: RuleNodeDa
         )}
         {data.label}
       </div>
-      <EditableName id={id} name={data.outputLabel} textClass={`text-[9px] ${isTable ? 'text-teal-500 dark:text-teal-400' : 'text-primary/60'}`} />
       {data.lastValue !== undefined && (
         <div className="text-[10px] text-muted-foreground truncate" title={data.lastValue}>= {data.lastValue}</div>
       )}
@@ -277,11 +286,24 @@ ValidationNode.displayName = 'ValidationNode';
 
 export const ConditionNode = memo(({ id, data }: NodeProps & { data: RuleNodeData }) => (
   <div className="rounded-lg border-2 border-orange-500 bg-orange-50/80 dark:bg-orange-950 shadow-sm min-w-[72px]">
-    {/* Single input on left */}
-    <Handle type="target" position={Position.Left} id="test" className={`${HANDLE} !bg-orange-500`} />
+    {/* Three inputs on left */}
+    <div className="border-b border-orange-300/40 dark:border-orange-700/40">
+      <div className="relative flex items-center px-2 py-1">
+        <Handle type="target" position={Position.Left} id="test" style={{ top: '50%' }} className={`${HANDLE} !bg-orange-500`} />
+        <span className="text-[9px] font-semibold text-orange-500 dark:text-orange-400 select-none ml-1">If</span>
+      </div>
+      <div className="relative flex items-center px-2 py-1 border-t border-orange-300/40 dark:border-orange-700/40">
+        <Handle type="target" position={Position.Left} id="true_val" style={{ top: '50%' }} className={`${HANDLE} !bg-emerald-500`} />
+        <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 select-none ml-1">True</span>
+      </div>
+      <div className="relative flex items-center px-2 py-1 border-t border-orange-300/40 dark:border-orange-700/40">
+        <Handle type="target" position={Position.Left} id="false_val" style={{ top: '50%' }} className={`${HANDLE} !bg-red-500`} />
+        <span className="text-[9px] font-semibold text-red-500 dark:text-red-400 select-none ml-1">False</span>
+      </div>
+    </div>
 
-    {/* Header */}
-    <div className="px-2.5 pt-1.5 pb-1 text-center">
+    {/* Header + result output */}
+    <div className="px-2.5 pt-1 pb-1.5 text-center">
       <div className="text-[8px] uppercase tracking-wider font-semibold text-orange-500 dark:text-orange-400 leading-none">If / Else</div>
       <EditableName id={id} name={data.outputLabel} textClass="text-[9px] text-orange-500 dark:text-orange-400" />
       {data.lastValue !== undefined && (
@@ -289,17 +311,8 @@ export const ConditionNode = memo(({ id, data }: NodeProps & { data: RuleNodeDat
       )}
     </div>
 
-    {/* Two output rows */}
-    <div className="border-t border-orange-300/40 dark:border-orange-700/40">
-      <div className="relative flex items-center justify-end px-2 py-1">
-        <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 select-none">True</span>
-        <Handle type="source" position={Position.Right} id="true" style={{ top: '50%' }} className={`${HANDLE} !bg-emerald-500`} />
-      </div>
-      <div className="relative flex items-center justify-end px-2 py-1 border-t border-orange-300/40 dark:border-orange-700/40">
-        <span className="text-[9px] font-semibold text-red-500 dark:text-red-400 select-none">False</span>
-        <Handle type="source" position={Position.Right} id="false" style={{ top: '50%' }} className={`${HANDLE} !bg-red-500`} />
-      </div>
-    </div>
+    {/* Single result output on right */}
+    <Handle type="source" position={Position.Right} id="result" className={`${HANDLE} !bg-orange-500`} />
   </div>
 ));
 ConditionNode.displayName = 'ConditionNode';

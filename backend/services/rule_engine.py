@@ -531,13 +531,57 @@ class RuleEngine:
         return TemplateRuleResult(rule_id=rule.id, rule_name=rule.name, passed=passed, message=msg)
 
     def _build_dependency_graph(self, rules: list[TemplateRule]) -> list[TemplateRule]:
-        """Topological sort: computations before validations, respect computed_ref deps."""
+        """Topological sort: computations ordered by computed_ref dependencies, then validations."""
         computations = [r for r in rules if r.type == "computation" and r.enabled]
         validations = [r for r in rules if r.type == "validation" and r.enabled]
-        # Simple approach: computations first, then validations
-        # For computed_ref dependencies between computations, we'd need full topo sort
-        # For now, order by appearance (user controls order)
-        return computations + validations
+
+        # Build dependency graph for computations
+        comp_by_id = {r.id: r for r in computations}
+
+        def _get_deps(rule: TemplateRule) -> set[str]:
+            """Get computed_ref IDs this rule depends on."""
+            deps: set[str] = set()
+            if rule.computation:
+                for op in rule.computation.operands:
+                    if op.type == "computed_ref" and op.computed_id:
+                        deps.add(op.computed_id)
+                if rule.computation.condition:
+                    for op in [rule.computation.condition.operand_a, rule.computation.condition.operand_b,
+                               rule.computation.condition.then_value, rule.computation.condition.else_value]:
+                        if op.type == "computed_ref" and op.computed_id:
+                            deps.add(op.computed_id)
+            if rule.validation:
+                if rule.validation.operand_a.type == "computed_ref" and rule.validation.operand_a.computed_id:
+                    deps.add(rule.validation.operand_a.computed_id)
+                if rule.validation.operand_b and rule.validation.operand_b.type == "computed_ref" and rule.validation.operand_b.computed_id:
+                    deps.add(rule.validation.operand_b.computed_id)
+            return deps & comp_by_id.keys()
+
+        # Kahn's algorithm for topological sort
+        in_degree: dict[str, int] = {r.id: 0 for r in computations}
+        dependents: dict[str, list[str]] = {r.id: [] for r in computations}
+        for r in computations:
+            for dep_id in _get_deps(r):
+                in_degree[r.id] += 1
+                dependents[dep_id].append(r.id)
+
+        queue = [rid for rid, deg in in_degree.items() if deg == 0]
+        sorted_comps: list[TemplateRule] = []
+        while queue:
+            rid = queue.pop(0)
+            sorted_comps.append(comp_by_id[rid])
+            for dep in dependents[rid]:
+                in_degree[dep] -= 1
+                if in_degree[dep] == 0:
+                    queue.append(dep)
+
+        # Add any remaining (cycle or unreachable) at the end
+        seen = {r.id for r in sorted_comps}
+        for r in computations:
+            if r.id not in seen:
+                sorted_comps.append(r)
+
+        return sorted_comps + validations
 
     def evaluate_all(
         self,

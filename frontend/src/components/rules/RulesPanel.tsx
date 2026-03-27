@@ -232,7 +232,8 @@ export default function RulesPanel() {
     (node: Node | undefined) => {
       if (!node || node.type !== 'field_input') return false;
       const d = node.data as RuleNodeData;
-      return d.fieldType === 'table';
+      // Check explicit fieldType OR detect from value pattern
+      return d.fieldType === 'table' || (d.lastValue != null && /^\d+ rows? x \d+ cols?$/.test(d.lastValue));
     }, []
   );
 
@@ -394,7 +395,9 @@ export default function RulesPanel() {
   const extractionResults = useAppStore((s) => s.extractionResults);
 
   useEffect(() => {
-    if (!extractionResults && templateRuleResults.length === 0 && Object.keys(computedValues).length === 0) return;
+    const hasLocalResults = !!extractionResults || templateRuleResults.length > 0 || Object.keys(computedValues).length > 0;
+    const hasCrossData = savedTestRuns.length > 0;
+    if (!hasLocalResults && !hasCrossData) return;
 
     // Build value lookups from local extraction
     const fieldValues: Record<string, string> = {};
@@ -451,8 +454,19 @@ export default function RulesPanel() {
           // Cross-template table preview
           const tplTables = crossTableData[data.fieldRef.template_id];
           const tbl = tplTables?.[data.fieldRef.field_label];
-          if (tbl && JSON.stringify(tbl) !== JSON.stringify(data.tablePreview)) {
-            patch.tablePreview = tbl;
+          if (tbl) {
+            if (JSON.stringify(tbl) !== JSON.stringify(data.tablePreview)) {
+              patch.tablePreview = tbl;
+              updated = true;
+            }
+            if (data.fieldType !== 'table') {
+              patch.fieldType = 'table';
+              updated = true;
+            }
+          }
+          // Fallback: detect table from value pattern "N rows x N cols"
+          const effectiveVal = val ?? data.lastValue;
+          if (!tbl && effectiveVal && /^\d+ rows? x \d+ cols?$/.test(effectiveVal) && data.fieldType !== 'table') {
             patch.fieldType = 'table';
             updated = true;
           }
@@ -519,7 +533,7 @@ export default function RulesPanel() {
       if (!updated) return n;
       return { ...n, data: { ...data, ...patch } };
     }));
-  }, [extractionResults, templateRuleResults, computedValues]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [extractionResults, templateRuleResults, computedValues, savedTestRuns, ruleNodes.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col h-full">
@@ -879,10 +893,17 @@ function InputSourceMenu({
                       onClick={() => onAddExternalField(
                         run.template_id || run.id, run.template_name || run.pdf_filename,
                         entry.label, 'specific_run', run.id,
+                        entry.table_data ? 'table' : undefined,
                       )}
                       className="w-full text-left px-2 py-1 text-[11px] text-foreground/80 hover:bg-muted rounded transition-colors flex items-center gap-1.5"
                     >
-                      <span className="w-1 h-1 rounded-full bg-muted-foreground/40 flex-shrink-0" />
+                      {entry.status === 'computed' ? (
+                        <span className="text-[8px] text-emerald-600 font-bold flex-shrink-0">fx</span>
+                      ) : entry.table_data ? (
+                        <span className="w-1.5 h-1.5 rounded-sm bg-teal-400 flex-shrink-0" />
+                      ) : (
+                        <span className="w-1 h-1 rounded-full bg-muted-foreground/40 flex-shrink-0" />
+                      )}
                       <span className="truncate flex-1">{entry.label}</span>
                       <span className="text-[9px] font-mono text-muted-foreground truncate max-w-[80px]">{entry.value || '(empty)'}</span>
                     </button>
