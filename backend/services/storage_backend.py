@@ -56,6 +56,20 @@ class StorageBackend(ABC):
     @abstractmethod
     def delete_template(self, template_id: str) -> bool: ...
 
+    # -- Test Runs --
+
+    @abstractmethod
+    def save_test_run(self, run_id: str, content: str) -> None: ...
+
+    @abstractmethod
+    def get_test_run(self, run_id: str) -> str | None: ...
+
+    @abstractmethod
+    def list_test_run_ids(self) -> list[str]: ...
+
+    @abstractmethod
+    def delete_test_run(self, run_id: str) -> bool: ...
+
 
 class LocalStorageBackend(StorageBackend):
     """Filesystem-backed storage (current behaviour)."""
@@ -66,8 +80,10 @@ class LocalStorageBackend(StorageBackend):
         self._uploads = base_dir / "uploads"
         self._templates = base_dir / "templates"
         self._metadata_file = self._uploads / "_metadata.json"
+        self._test_runs = base_dir / "test_runs"
         self._uploads.mkdir(parents=True, exist_ok=True)
         self._templates.mkdir(parents=True, exist_ok=True)
+        self._test_runs.mkdir(parents=True, exist_ok=True)
 
     # -- PDFs --
 
@@ -118,11 +134,32 @@ class LocalStorageBackend(StorageBackend):
         path.unlink()
         return True
 
+    # -- Test Runs --
+
+    def save_test_run(self, run_id: str, content: str) -> None:
+        (self._test_runs / f"{run_id}.json").write_text(content, encoding="utf-8")
+
+    def get_test_run(self, run_id: str) -> str | None:
+        path = self._test_runs / f"{run_id}.json"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    def list_test_run_ids(self) -> list[str]:
+        return [p.stem for p in sorted(self._test_runs.glob("*.json"))]
+
+    def delete_test_run(self, run_id: str) -> bool:
+        path = self._test_runs / f"{run_id}.json"
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
+
 
 class AzureBlobStorageBackend(StorageBackend):
     """Azure Blob Storage backend using DefaultAzureCredential."""
 
-    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates"):
+    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs"):
         from azure.identity import DefaultAzureCredential
         from azure.storage.blob import BlobServiceClient
 
@@ -131,6 +168,7 @@ class AzureBlobStorageBackend(StorageBackend):
         self._client = BlobServiceClient(account_url, credential=credential)
         self._pdfs = self._client.get_container_client(pdfs_container)
         self._templates = self._client.get_container_client(templates_container)
+        self._test_runs = self._client.get_container_client(test_runs_container)
 
     # -- PDFs --
 
@@ -204,6 +242,34 @@ class AzureBlobStorageBackend(StorageBackend):
         blob_client.delete_blob()
         return True
 
+    # -- Test Runs --
+
+    def save_test_run(self, run_id: str, content: str) -> None:
+        self._test_runs.upload_blob(
+            f"{run_id}.json", content, overwrite=True
+        )
+
+    def get_test_run(self, run_id: str) -> str | None:
+        blob_client = self._test_runs.get_blob_client(f"{run_id}.json")
+        if not blob_client.exists():
+            return None
+        return blob_client.download_blob().readall().decode("utf-8")
+
+    def list_test_run_ids(self) -> list[str]:
+        ids = []
+        for blob in self._test_runs.list_blobs():
+            name = blob.name
+            if name.endswith(".json"):
+                ids.append(name.removesuffix(".json"))
+        return sorted(ids)
+
+    def delete_test_run(self, run_id: str) -> bool:
+        blob_client = self._test_runs.get_blob_client(f"{run_id}.json")
+        if not blob_client.exists():
+            return False
+        blob_client.delete_blob()
+        return True
+
 
 # -- Singleton --
 
@@ -213,13 +279,14 @@ _instance: StorageBackend | None = None
 def get_storage() -> StorageBackend:
     global _instance
     if _instance is None:
-        from config import STORAGE_BACKEND, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_PDFS_CONTAINER, AZURE_STORAGE_TEMPLATES_CONTAINER
+        from config import STORAGE_BACKEND, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_PDFS_CONTAINER, AZURE_STORAGE_TEMPLATES_CONTAINER, AZURE_STORAGE_TEST_RUNS_CONTAINER
 
         if STORAGE_BACKEND == "azure":
             _instance = AzureBlobStorageBackend(
                 account_name=AZURE_STORAGE_ACCOUNT,
                 pdfs_container=AZURE_STORAGE_PDFS_CONTAINER,
                 templates_container=AZURE_STORAGE_TEMPLATES_CONTAINER,
+                test_runs_container=AZURE_STORAGE_TEST_RUNS_CONTAINER,
             )
         else:
             _instance = LocalStorageBackend()

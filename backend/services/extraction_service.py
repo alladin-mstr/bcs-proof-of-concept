@@ -1,6 +1,9 @@
 import re
 from datetime import datetime, date
-from models.schemas import Field, FieldResult, Rule, RuleResult, StepTrace
+from models.schemas import (
+    Field, FieldResult, Rule, RuleResult, StepTrace,
+    TemplateRule, ComputedField, TemplateRuleResult, ExtractionResponse,
+)
 from services.pdf_service import (
     extract_text_from_region,
     extract_text_from_shifted_region,
@@ -8,8 +11,13 @@ from services.pdf_service import (
     search_anchor_fullpage,
     search_value_near_anchor,
     matches_format,
+    extract_table,
 )
 from services.chain_engine import execute_field_chain
+from services.rule_engine import (
+    RuleEngine, detect_datatype,
+    collect_cross_template_refs, resolve_cross_template_values,
+)
 
 
 def normalize_text(text: str) -> str:
@@ -244,18 +252,30 @@ def validate_rule(rule: Rule, value: str, all_values: dict[str, str] | None = No
         if not rule.compare_field_label or not rule.compare_operator:
             return RuleResult(rule_type="compare_field", passed=False, message="No comparison field or operator configured")
 
-        if all_values is None:
-            return RuleResult(rule_type="compare_field", passed=False, message="Cross-field comparison not available")
-
         other_label = rule.compare_field_label
-        if other_label not in all_values:
-            return RuleResult(
-                rule_type="compare_field",
-                passed=False,
-                message=f"Field '{other_label}' not found",
-            )
+        other_raw = None
 
-        other_raw = all_values[other_label]
+        # If comparing against a saved test run, load the value from there
+        if rule.compare_test_run_id:
+            from services.test_run_store import get_test_run
+            run = get_test_run(rule.compare_test_run_id)
+            if run is None:
+                return RuleResult(rule_type="compare_field", passed=False, message=f"Saved run not found")
+            entry = next((e for e in run.entries if e.label == other_label), None)
+            if entry is None:
+                return RuleResult(rule_type="compare_field", passed=False, message=f"Field '{other_label}' not found in saved run")
+            other_raw = entry.value
+        else:
+            # Compare against current extraction fields
+            if all_values is None:
+                return RuleResult(rule_type="compare_field", passed=False, message="Cross-field comparison not available")
+            if other_label not in all_values:
+                return RuleResult(
+                    rule_type="compare_field",
+                    passed=False,
+                    message=f"Field '{other_label}' not found",
+                )
+            other_raw = all_values[other_label]
         this_val = value.strip()
         other_val = other_raw.strip()
         op = rule.compare_operator
@@ -421,14 +441,21 @@ def resolve_dynamic_field(pdf_path: str, field: Field) -> dict:
     }
 
 
-def extract_all_fields(pdf_path: str, fields: list[Field], pdf_path_b: str | None = None) -> list[FieldResult]:
-    """Extract all fields from a PDF using two-pass approach.
+def extract_all_fields(
+    pdf_path: str,
+    fields: list[Field],
+    pdf_path_b: str | None = None,
+    template_rules: list[TemplateRule] | None = None,
+    computed_fields: list[ComputedField] | None = None,
+    template_id: str = "",
+) -> tuple[list[FieldResult], list[TemplateRuleResult], dict[str, str]]:
+    """Extract all fields from a PDF using three-pass approach.
 
     Pass 1: Extract raw values and check anchors for all fields.
-            If field has a chain, use chain engine; otherwise use legacy logic.
-    Pass 2: Validate rules (which may reference other fields' values).
+    Pass 2: Legacy field-level rules (backward compat).
+    Pass 3: Template-level rules (validations + computations via RuleEngine).
 
-    pdf_path_b: optional second PDF path for comparison mode fields with source="b".
+    Returns (field_results, template_rule_results, computed_values).
     """
     # --- Pass 1: Extract values and check anchors ---
     extracted: list[dict] = []
@@ -437,6 +464,112 @@ def extract_all_fields(pdf_path: str, fields: list[Field], pdf_path_b: str | Non
     for field in fields:
         # Pick the correct PDF based on field source
         field_pdf = pdf_path_b if (field.source == "b" and pdf_path_b) else pdf_path
+
+        if field.type == "table":
+            # Table extraction: use table_config to extract structured data
+            tc = field.table_config
+            if tc and tc.columns:
+                # If table has anchors/chain, run anchor search first to get dx/dy
+                anchor_dx = 0.0
+                anchor_dy = 0.0
+                anchor_status = "ok"
+                expected_anchor = None
+                actual_anchor = None
+                anchor_shift = None
+                step_traces = []
+                anchors_found = {}
+
+                if field.chain:
+                    resolved = execute_field_chain(field_pdf, field)
+                    anchor_dx = resolved.get("anchor_dx") or 0.0
+                    anchor_dy = resolved.get("anchor_dy") or 0.0
+                    anchor_status = resolved.get("status", "ok")
+                    expected_anchor = resolved.get("expected_anchor")
+                    actual_anchor = resolved.get("actual_anchor")
+                    anchor_shift = resolved.get("anchor_shift")
+                    step_traces = resolved.get("step_traces", [])
+                    anchors_found = resolved.get("anchors_found", {})
+
+                # Apply anchor shift to table region and column x positions
+                table_top = tc.table_region.y + anchor_dy
+                table_height = tc.table_region.height
+
+                # Resolve end anchor to determine table bottom dynamically
+                if tc.end_anchor_mode == "end_of_page":
+                    table_height = 1.0 - table_top
+                elif tc.end_anchor_mode == "text" and tc.end_anchor_text:
+                    from services.pdf_service import find_end_anchor_y
+                    end_y = find_end_anchor_y(
+                        field_pdf,
+                        page_num=tc.table_region.page,
+                        expected_text=tc.end_anchor_text,
+                        below_y=table_top,
+                    )
+                    if end_y is not None:
+                        table_height = end_y - table_top
+
+                table_region = {
+                    "x": tc.table_region.x + anchor_dx,
+                    "y": table_top,
+                    "width": tc.table_region.width,
+                    "height": table_height,
+                }
+                cols = [{"id": c.id, "label": c.label, "x": c.x + anchor_dx} for c in tc.columns]
+                table_data = extract_table(
+                    field_pdf,
+                    page_num=tc.table_region.page,
+                    table_region=table_region,
+                    columns=cols,
+                    header_row=tc.header_row,
+                    key_column_id=tc.key_column_id,
+                )
+                n_rows = len(table_data)
+                n_cols = len(tc.columns)
+                summary = f"{n_rows} rows x {n_cols} cols"
+                base_status = anchor_status if anchor_status != "ok" else ("ok" if table_data else "empty")
+                # Track resolved height if end anchor changed it
+                resolved_table_height = table_height if tc.end_anchor_mode and tc.end_anchor_mode != "none" else None
+
+                all_values[field.label] = summary
+                extracted.append({
+                    "field": field,
+                    "value": summary,
+                    "table_data": table_data,
+                    "base_status": base_status,
+                    "expected_anchor": expected_anchor,
+                    "actual_anchor": actual_anchor,
+                    "anchor_shift": anchor_shift,
+                    "anchor_dx": anchor_dx if anchor_dx else None,
+                    "anchor_dy": anchor_dy if anchor_dy else None,
+                    "value_found_x": None,
+                    "value_found_y": None,
+                    "value_found_width": None,
+                    "anchors_found": anchors_found,
+                    "step_traces": step_traces,
+                    "uses_chain": False,
+                    "resolved_table_height": resolved_table_height,
+                })
+            else:
+                all_values[field.label] = ""
+                extracted.append({
+                    "field": field,
+                    "value": "",
+                    "table_data": None,
+                    "base_status": "empty",
+                    "expected_anchor": None,
+                    "actual_anchor": None,
+                    "anchor_shift": None,
+                    "anchor_dx": None,
+                    "anchor_dy": None,
+                    "value_found_x": None,
+                    "value_found_y": None,
+                    "value_found_width": None,
+                    "anchors_found": {},
+                    "step_traces": [],
+                    "uses_chain": False,
+                    "resolved_table_height": None,
+                })
+            continue
 
         if field.chain:
             # Use chain engine (pass 1 - no cross-field values yet)
@@ -544,8 +677,40 @@ def extract_all_fields(pdf_path: str, fields: list[Field], pdf_path_b: str | Non
             value_found_y=entry["value_found_y"],
             value_found_width=entry["value_found_width"],
             anchors_found=entry.get("anchors_found", {}),
+            table_data=entry.get("table_data"),
+            resolved_table_height=entry.get("resolved_table_height"),
             rule_results=rule_results,
             step_traces=step_traces,
+            detected_datatype=detect_datatype(value),
         ))
 
-    return results
+    # --- Pass 3: Template-level rules (validations + computations) ---
+    template_rule_results: list[TemplateRuleResult] = []
+    computed_values: dict[str, str] = {}
+
+    if template_rules:
+        # Resolve cross-template references
+        cross_refs = collect_cross_template_refs(template_rules)
+        if cross_refs:
+            cross_values, cross_table_values = resolve_cross_template_values(cross_refs, template_id)
+        else:
+            cross_values, cross_table_values = {}, {}
+
+        # Build table_values from extracted table fields
+        table_values: dict[str, list[dict[str, str]]] = {}
+        for entry in extracted:
+            if entry.get("table_data"):
+                table_values[entry["field"].label] = entry["table_data"]
+
+        engine = RuleEngine(
+            current_template_id=template_id,
+            extracted_values=dict(all_values),
+            cross_template_values=cross_values,
+            table_values=table_values,
+            cross_table_values=cross_table_values,
+        )
+        computed_values, template_rule_results = engine.evaluate_all(
+            template_rules, computed_fields
+        )
+
+    return results, template_rule_results, computed_values

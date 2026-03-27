@@ -55,6 +55,48 @@ def _find_matching_lines(
     return matches
 
 
+def find_end_anchor_y(
+    pdf_path: str,
+    page_num: int,
+    expected_text: str,
+    below_y: float = 0.0,
+) -> float | None:
+    """Search for text on a page and return its top-y (normalized).
+
+    Only considers matches whose top-y is at or below `below_y`.
+    Returns the y-position of the closest match below `below_y`, or None.
+    """
+    with pdfplumber.open(pdf_path) as pdf:
+        page_idx = page_num - 1
+        if page_idx < 0 or page_idx >= len(pdf.pages):
+            return None
+        page = pdf.pages[page_idx]
+        pw, ph = float(page.width), float(page.height)
+
+        words = page.extract_words()
+        if not words:
+            return None
+
+        lines = _group_words_into_lines(words)
+        matching_lines = _find_matching_lines(lines, expected_text)
+
+        if not matching_lines:
+            return None
+
+        candidates = []
+        for line in matching_lines:
+            line_y = float(line[0]["top"]) / ph
+            if line_y >= below_y - 0.01:  # small tolerance
+                candidates.append(line_y)
+
+        if not candidates:
+            return None
+
+        # Return the closest match below the start y
+        candidates.sort()
+        return candidates[0]
+
+
 def search_anchor_slide(
     pdf_path: str,
     anchor_region: Region,
@@ -579,6 +621,165 @@ def get_page_layout(pdf_path: str, page_num: int, line_margin: float = 1.0) -> l
             block_idx += 1
 
         return blocks
+
+
+def extract_table(
+    pdf_path: str,
+    page_num: int,
+    table_region: dict,
+    columns: list[dict],
+    header_row: bool = True,
+    key_column_id: str | None = None,
+) -> list[dict]:
+    """Extract structured table data from a PDF region.
+
+    Uses pdfminer's LTTextLine elements to detect rows by y-position proximity,
+    then assigns each text element to a column based on x-overlap.
+
+    Args:
+        pdf_path: Path to the PDF file.
+        page_num: 1-indexed page number.
+        table_region: Normalized bounding box {x, y, width, height, page}.
+        columns: List of {id, label, x} sorted by x position. Each column's
+                 width extends from its x to the next column's x (or table right edge).
+        header_row: If True, skip the first detected row (treat as header).
+        key_column_id: If set, the column that always has data in every real row.
+                       Lines where this column is empty are merged into the row above.
+
+    Returns:
+        List of row dicts: [{col_label: cell_text, ...}, ...]
+    """
+    from pdfminer.layout import LTTextBox, LTTextLine
+
+    with pdfplumber.open(pdf_path, laparams={
+        "boxes_flow": 0.5,
+        "line_margin": 0.5,   # Tight grouping for table rows
+        "word_margin": 0.1,
+    }) as pdf:
+        page_idx = page_num - 1
+        if page_idx < 0 or page_idx >= len(pdf.pages):
+            return []
+        page = pdf.pages[page_idx]
+        pw, ph = float(page.width), float(page.height)
+
+        # Table bounds (normalized)
+        t_x = table_region["x"]
+        t_y = table_region["y"]
+        t_right = t_x + table_region["width"]
+        t_bottom = t_y + table_region["height"]
+
+        # Collect all LTTextLine elements within the table bounds
+        text_lines: list[dict] = []
+        for element in page.layout:
+            if not isinstance(element, LTTextBox):
+                continue
+            for child in element:
+                if not isinstance(child, LTTextLine):
+                    continue
+                line_text = child.get_text().strip()
+                if not line_text:
+                    continue
+                lb = child.bbox  # (x0, y0_bottom, x1, y1_top) — bottom-left origin
+                # Convert to normalized top-left origin
+                nx = lb[0] / pw
+                ny = (ph - lb[3]) / ph
+                nw = (lb[2] - lb[0]) / pw
+                nh = (lb[3] - lb[1]) / ph
+                # Center points
+                cx = nx + nw / 2
+                cy = ny + nh / 2
+                # Check if within table bounds
+                if cx < t_x or cx > t_right or cy < t_y or cy > t_bottom:
+                    continue
+                text_lines.append({
+                    "text": line_text,
+                    "x": nx, "y": ny,
+                    "width": nw, "height": nh,
+                    "cx": cx, "cy": cy,
+                })
+
+        if not text_lines:
+            return []
+
+        # Sort by y position (top to bottom)
+        text_lines.sort(key=lambda tl: tl["cy"])
+
+        # Group into rows by y-proximity
+        # Use median line height as the tolerance for grouping
+        heights = [tl["height"] for tl in text_lines]
+        heights.sort()
+        median_h = heights[len(heights) // 2] if heights else 0.01
+        y_tolerance = median_h * 0.6
+
+        rows: list[list[dict]] = []
+        current_row: list[dict] = [text_lines[0]]
+        current_y = text_lines[0]["cy"]
+
+        for tl in text_lines[1:]:
+            if abs(tl["cy"] - current_y) <= y_tolerance:
+                current_row.append(tl)
+            else:
+                rows.append(current_row)
+                current_row = [tl]
+                current_y = tl["cy"]
+        rows.append(current_row)
+
+        # Build column boundaries: each column spans from columns[i].x to columns[i+1].x
+        sorted_cols = sorted(columns, key=lambda c: c["x"])
+        col_bounds: list[tuple[float, float, str]] = []  # (left_x, right_x, label)
+        for i, col in enumerate(sorted_cols):
+            left = col["x"]
+            if i + 1 < len(sorted_cols):
+                right = sorted_cols[i + 1]["x"]
+            else:
+                right = t_right
+            col_bounds.append((left, right, col["label"]))
+
+        # Skip header row if configured
+        data_rows = rows[1:] if header_row and len(rows) > 1 else rows
+
+        # Resolve key column label from id
+        key_col_label: str | None = None
+        if key_column_id:
+            for col in columns:
+                if col["id"] == key_column_id:
+                    key_col_label = col["label"]
+                    break
+
+        # Assign text elements to columns for each raw row
+        raw_rows: list[dict[str, str]] = []
+        for row_lines in data_rows:
+            row_dict: dict[str, str] = {}
+            for tl in row_lines:
+                for left, right, label in col_bounds:
+                    if left <= tl["cx"] < right:
+                        if label in row_dict:
+                            row_dict[label] += " " + tl["text"]
+                        else:
+                            row_dict[label] = tl["text"]
+                        break
+            # Ensure all columns are present
+            for _, _, label in col_bounds:
+                if label not in row_dict:
+                    row_dict[label] = ""
+            raw_rows.append(row_dict)
+
+        # Merge rows using key column: if key column cell is empty, merge into previous row
+        if key_col_label and raw_rows:
+            merged: list[dict[str, str]] = []
+            for row in raw_rows:
+                if merged and not row.get(key_col_label, "").strip():
+                    # Merge into previous row: append non-empty cell text
+                    prev = merged[-1]
+                    for label in prev:
+                        cell = row.get(label, "").strip()
+                        if cell:
+                            prev[label] = (prev[label] + " " + cell).strip() if prev[label] else cell
+                else:
+                    merged.append(row)
+            return merged
+
+        return raw_rows
 
 
 def find_anchor_in_blocks(

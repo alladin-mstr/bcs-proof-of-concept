@@ -120,14 +120,14 @@ function ComparisonPane({
   const isA = source === "a";
   const accent = isA
     ? {
-        bg: "bg-blue-50",
-        border: "border-blue-200",
+        bg: "bg-blue-50 dark:bg-blue-950/20",
+        border: "border-blue-200 dark:border-blue-800",
         badge: "bg-blue-600",
         text: "text-blue-600",
       }
     : {
-        bg: "bg-emerald-50",
-        border: "border-emerald-200",
+        bg: "bg-emerald-50 dark:bg-emerald-950/20",
+        border: "border-emerald-200 dark:border-emerald-800",
         badge: "bg-emerald-600",
         text: "text-emerald-600",
       };
@@ -137,7 +137,7 @@ function ComparisonPane({
   if (collapsed) {
     return (
       <div
-        className="flex flex-col items-center py-4 px-1 bg-gray-50 border-r border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+        className="flex flex-col items-center py-4 px-1 bg-muted border-r border-border cursor-pointer hover:bg-muted/80 transition-colors"
         onClick={onToggle}
       >
         <span
@@ -167,7 +167,7 @@ function ComparisonPane({
             />
           )}
         </svg>
-        <span className="text-[10px] text-gray-400 mt-1 [writing-mode:vertical-rl]">
+        <span className="text-[10px] text-muted-foreground mt-1 [writing-mode:vertical-rl]">
           {pdfFilename ?? "No PDF"}
         </span>
       </div>
@@ -192,7 +192,7 @@ function ComparisonPane({
         <select
           value={pdfId ?? ""}
           onChange={(e) => handleFileChange(e.target.value)}
-          className="text-xs bg-white border border-gray-200 rounded px-2 py-1 max-w-[180px] truncate"
+          className="text-xs bg-background border border-border rounded px-2 py-1 max-w-[180px] truncate"
         >
           <option value="">Select PDF...</option>
           {pdfList.map((pdf) => (
@@ -204,11 +204,11 @@ function ComparisonPane({
 
         {pdfId && pageCount > 1 && (
           <>
-            <div className="w-px h-4 bg-gray-300 mx-0.5" />
+            <div className="w-px h-4 bg-border mx-0.5" />
             <button
               onClick={() => setPage(Math.max(1, currentPage - 1))}
               disabled={currentPage <= 1}
-              className="p-0.5 text-gray-500 hover:text-gray-800 disabled:opacity-30"
+              className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -224,13 +224,13 @@ function ComparisonPane({
                 />
               </svg>
             </button>
-            <span className="text-[10px] text-gray-600 font-medium">
+            <span className="text-[10px] text-foreground/70 font-medium">
               {currentPage}/{pageCount}
             </span>
             <button
               onClick={() => setPage(Math.min(pageCount, currentPage + 1))}
               disabled={currentPage >= pageCount}
-              className="p-0.5 text-gray-500 hover:text-gray-800 disabled:opacity-30"
+              className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -249,13 +249,13 @@ function ComparisonPane({
           </>
         )}
 
-        <div className="w-px h-4 bg-gray-300 mx-0.5" />
+        <div className="w-px h-4 bg-border mx-0.5" />
 
         {/* Zoom controls */}
         <button
           onClick={() => onZoomIndexChange(Math.max(zoomIndex - 1, 0))}
           disabled={zoomIndex <= 0}
-          className="p-0.5 text-gray-500 hover:text-gray-800 disabled:opacity-30"
+          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
         >
           <svg
             className="w-3.5 h-3.5"
@@ -273,7 +273,7 @@ function ComparisonPane({
         </button>
         <button
           onClick={() => onZoomIndexChange(DEFAULT_ZOOM_INDEX)}
-          className="text-[10px] font-medium text-gray-600 hover:text-gray-800 px-1 py-0.5 rounded hover:bg-white/60 min-w-[36px] text-center"
+          className="text-[10px] font-medium text-foreground/70 hover:text-foreground px-1 py-0.5 rounded hover:bg-background/60 min-w-[36px] text-center"
         >
           {Math.round(zoom * 100)}%
         </button>
@@ -282,7 +282,7 @@ function ComparisonPane({
             onZoomIndexChange(Math.min(zoomIndex + 1, ZOOM_LEVELS.length - 1))
           }
           disabled={zoomIndex >= ZOOM_LEVELS.length - 1}
-          className="p-0.5 text-gray-500 hover:text-gray-800 disabled:opacity-30"
+          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
         >
           <svg
             className="w-3.5 h-3.5"
@@ -307,8 +307,8 @@ function ComparisonPane({
             onClick={onToggleLinkages}
             className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
               showLinkages
-                ? "bg-violet-100 text-violet-700 border border-violet-300"
-                : "bg-white text-gray-400 border border-gray-200 hover:border-violet-200 hover:text-violet-600"
+                ? "bg-violet-100 text-violet-700 border border-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700"
+                : "bg-background text-muted-foreground border border-border hover:border-violet-200 hover:text-violet-600"
             }`}
           >
             <svg
@@ -337,7 +337,7 @@ function ComparisonPane({
         {/* Collapse button */}
         <button
           onClick={onToggle}
-          className="p-1 text-gray-400 hover:text-gray-600 transition-colors rounded hover:bg-white/60"
+          className="p-1 text-muted-foreground hover:text-foreground/70 transition-colors rounded hover:bg-background/60"
           title={`Hide PDF ${source.toUpperCase()}`}
         >
           <svg
@@ -401,13 +401,13 @@ function ComparisonPane({
           {fileUrl ? (
             <div
               ref={containerRef}
-              className="relative inline-block shadow-lg rounded-lg overflow-hidden border border-gray-200"
+              className="relative inline-block shadow-lg rounded-lg overflow-hidden border border-border"
               style={{ userSelect: "none" }}
             >
               <Document
                 file={fileUrl}
                 loading={
-                  <div className="p-8 text-gray-400 text-sm">
+                  <div className="p-8 text-muted-foreground text-sm">
                     Loading PDF...
                   </div>
                 }
@@ -417,7 +417,7 @@ function ComparisonPane({
                   scale={zoom}
                   onRenderSuccess={onRenderSuccess}
                   loading={
-                    <div className="p-8 text-gray-400 text-sm">
+                    <div className="p-8 text-muted-foreground text-sm">
                       Loading page...
                     </div>
                   }
@@ -434,7 +434,7 @@ function ComparisonPane({
               )}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+            <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
               Select a PDF file above
             </div>
           )}
@@ -903,7 +903,7 @@ export default function ComparisonCanvas() {
         hasConnections={hasConnections}
         onToggleLinkages={handleToggleLinkages}
       />
-      <div className="w-px bg-gray-300 flex-shrink-0" />
+      <div className="w-px bg-border flex-shrink-0" />
       <ComparisonPane
         source="b"
         collapsed={collapsedB}
@@ -927,8 +927,8 @@ export default function ComparisonCanvas() {
                 className="fixed inset-0 z-30"
                 onClick={() => setPendingConnection(null)}
               />
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-white rounded-xl shadow-2xl border border-violet-200 p-3 w-52">
-                <p className="text-xs text-gray-700 mb-2 text-center">
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-popover rounded-xl shadow-2xl border border-violet-200 dark:border-violet-800 p-3 w-52">
+                <p className="text-xs text-foreground mb-2 text-center">
                   <span className="font-semibold text-blue-700">
                     {fromField.label}
                   </span>
@@ -942,7 +942,7 @@ export default function ComparisonCanvas() {
                     <button
                       key={op.value}
                       onClick={() => confirmConnect(op.value)}
-                      className="w-full text-left px-2 py-1.5 text-xs rounded-lg hover:bg-violet-50 text-gray-700 hover:text-violet-700 transition-colors"
+                      className="w-full text-left px-2 py-1.5 text-xs rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/30 text-foreground hover:text-violet-700 transition-colors"
                     >
                       {op.label}
                     </button>
@@ -950,7 +950,7 @@ export default function ComparisonCanvas() {
                 </div>
                 <button
                   onClick={() => setPendingConnection(null)}
-                  className="w-full mt-2 text-[10px] text-gray-400 hover:text-gray-600 text-center"
+                  className="w-full mt-2 text-[10px] text-muted-foreground hover:text-foreground/70 text-center"
                 >
                   Cancel
                 </button>

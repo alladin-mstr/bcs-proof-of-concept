@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { Field, Template, FieldResult, Region, Rule, ChainStep, LayoutBlock, AnchorMode, AnchorRole, Anchor } from '../types';
+import type { Field, Template, FieldResult, Region, Rule, ChainStep, LayoutBlock, AnchorMode, AnchorRole, Anchor, TestRun, TableColumn, TableConfig, TemplateRule, ComputedField, TemplateRuleResult, DataType } from '../types';
+import type { Node, Edge } from '@xyflow/react';
 
 interface AppState {
   pdfId: string | null;
@@ -31,6 +32,15 @@ interface AppState {
     currentStep: number;
     steps: { role: AnchorRole; prompt: string }[];
     completedAnchors: Anchor[];
+  } | null;
+
+  // Table wizard (guided table field creation)
+  tableWizard: {
+    fieldId: string;
+    phase: 'bounds' | 'dividers' | 'labels';
+    tableBounds: Region | null;
+    columns: TableColumn[];
+    keyColumnId: string | null;
   } | null;
 
   // Layout overlay
@@ -65,6 +75,7 @@ interface AppState {
   // Field edit
   setEditingFieldId: (id: string | null) => void;
   updateFieldLabel: (fieldId: string, label: string) => void;
+  updateFieldDataType: (fieldId: string, datatype: DataType | undefined) => void;
 
   // Chain operations
   setChainEditFieldId: (id: string | null) => void;
@@ -85,6 +96,18 @@ interface AppState {
   startAnchorWizard: (fieldId: string, targetMode: AnchorMode) => void;
   completeAnchorWizardStep: (region: Region, expectedText: string) => void;
   cancelAnchorWizard: () => void;
+
+  // Table wizard actions
+  startTableWizard: (fieldId: string) => void;
+  completeTableBounds: (region: Region) => void;
+  addTableDivider: (x: number) => void;
+  removeTableDivider: (columnId: string) => void;
+  updateTableDividerX: (columnId: string, x: number) => void;
+  updateTableColumnLabel: (columnId: string, label: string) => void;
+  setTableWizardPhase: (phase: 'bounds' | 'dividers' | 'labels') => void;
+  setTableKeyColumn: (columnId: string | null) => void;
+  finishTableWizard: () => void;
+  cancelTableWizard: () => void;
 
   // Comparison mode actions
   setPdfB: (pdfId: string, pageCount: number, filename?: string) => void;
@@ -109,6 +132,38 @@ interface AppState {
   setConnectDragFrom: (from: { fieldId: string; source: 'a' | 'b' } | null) => void;
   setConnectDragMouse: (pos: { x: number; y: number } | null) => void;
   setPendingConnection: (conn: { fromId: string; toId: string } | null) => void;
+
+  // Saved test runs
+  savedTestRuns: TestRun[];
+  setSavedTestRuns: (runs: TestRun[]) => void;
+  addSavedTestRun: (run: TestRun) => void;
+  removeSavedTestRun: (runId: string) => void;
+
+  // Template-level rules (Rules panel)
+  templateRules: TemplateRule[];
+  computedFields: ComputedField[];
+  templateRuleResults: TemplateRuleResult[];
+  computedValues: Record<string, string>;
+  rightPanelTab: "results" | "rules";
+  rightPanelCollapsed: boolean;
+
+  // React Flow state for rules editor
+  ruleNodes: Node[];
+  ruleEdges: Edge[];
+  setRuleNodes: (nodes: Node[]) => void;
+  setRuleEdges: (edges: Edge[]) => void;
+
+  addTemplateRule: (rule: TemplateRule) => void;
+  updateTemplateRule: (ruleId: string, updates: Partial<TemplateRule>) => void;
+  removeTemplateRule: (ruleId: string) => void;
+  setTemplateRules: (rules: TemplateRule[]) => void;
+  addComputedField: (field: ComputedField) => void;
+  removeComputedField: (fieldId: string) => void;
+  setComputedFields: (fields: ComputedField[]) => void;
+  setRightPanelTab: (tab: "results" | "rules") => void;
+  toggleRightPanel: () => void;
+  setTemplateRuleResults: (results: TemplateRuleResult[]) => void;
+  setComputedValues: (values: Record<string, string>) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -127,6 +182,7 @@ export const useAppStore = create<AppState>((set) => ({
   drawingRegionForStepId: null,
 
   anchorWizard: null,
+  tableWizard: null,
 
   layoutBlocks: [],
   showLayoutOverlay: false,
@@ -142,10 +198,10 @@ export const useAppStore = create<AppState>((set) => ({
   templateMode: "single",
 
   setPdf: (pdfId, pageCount, filename) =>
-    set({ pdfId, pdfFilename: filename ?? null, pageCount, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null, pdfIdB: null, pdfFilenameB: null, pageCountB: 0, currentPageB: 1, activeSource: "a" }),
+    set({ pdfId, pdfFilename: filename ?? null, pageCount, currentPage: 1, extractionResults: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null, pdfIdB: null, pdfFilenameB: null, pageCountB: 0, currentPageB: 1, activeSource: "a", templateRuleResults: [], computedValues: {} }),
 
   clearPdf: () =>
-    set({ pdfId: null, pdfFilename: null, pageCount: 0, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null, pdfIdB: null, pdfFilenameB: null, pageCountB: 0, currentPageB: 1, activeSource: "a" }),
+    set({ pdfId: null, pdfFilename: null, pageCount: 0, currentPage: 1, fields: [], extractionResults: null, activeTemplateId: null, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, drawingRegionForStepId: null, pdfIdB: null, pdfFilenameB: null, pageCountB: 0, currentPageB: 1, activeSource: "a", ruleNodes: [], ruleEdges: [], templateRules: [], computedFields: [], templateRuleResults: [], computedValues: {} }),
 
   addField: (field) =>
     set((state) => ({
@@ -167,12 +223,25 @@ export const useAppStore = create<AppState>((set) => ({
   setTemplates: (templates) => set({ templates }),
 
   loadTemplate: (template) =>
-    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, editingFieldId: null, chainEditFieldId: null, templateMode: template.mode ?? "single" }),
+    set({
+      fields: template.fields, activeTemplateId: template.id, pendingAnchor: null,
+      editingFieldId: null, chainEditFieldId: null, templateMode: template.mode ?? "single",
+      templateRules: template.rules ?? [], computedFields: template.computed_fields ?? [],
+      ruleNodes: (template.rule_graph?.nodes as Node[] | undefined) ?? [],
+      ruleEdges: (template.rule_graph?.edges as Edge[] | undefined) ?? [],
+    }),
 
   setExtractionResults: (results) => set({ extractionResults: results }),
 
   editTemplate: (template) =>
-    set({ fields: template.fields, activeTemplateId: template.id, pendingAnchor: null, extractionResults: null, editingFieldId: null, chainEditFieldId: null, templateMode: template.mode ?? "single" }),
+    set({
+      fields: template.fields, activeTemplateId: template.id, pendingAnchor: null,
+      extractionResults: null, editingFieldId: null, chainEditFieldId: null,
+      templateMode: template.mode ?? "single",
+      templateRules: template.rules ?? [], computedFields: template.computed_fields ?? [],
+      ruleNodes: (template.rule_graph?.nodes as Node[] | undefined) ?? [],
+      ruleEdges: (template.rule_graph?.edges as Edge[] | undefined) ?? [],
+    }),
 
   setDrawMode: (mode) => set({ drawMode: mode, pendingAnchor: null }),
 
@@ -201,6 +270,13 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({
       fields: state.fields.map((f) =>
         f.id === fieldId ? { ...f, label } : f
+      ),
+    })),
+
+  updateFieldDataType: (fieldId, datatype) =>
+    set((state) => ({
+      fields: state.fields.map((f) =>
+        f.id === fieldId ? { ...f, detected_datatype: datatype } : f
       ),
     })),
 
@@ -369,19 +445,22 @@ export const useAppStore = create<AppState>((set) => ({
         const primaryAnchor = completedAnchors.find(a => a.role === 'primary');
         return {
           anchorWizard: null,
-          fields: state.fields.map((f) =>
-            f.id === wizard.fieldId
-              ? {
-                  ...f,
-                  type: wizard.targetMode === 'static' ? 'static' as const : 'dynamic' as const,
-                  anchor_mode: wizard.targetMode,
-                  anchors: completedAnchors,
-                  anchor_region: primaryAnchor?.region,
-                  expected_anchor_text: primaryAnchor?.expected_text,
-                  chain: defaultChains[wizard.targetMode](),
-                }
-              : f
-          ),
+          fields: state.fields.map((f) => {
+            if (f.id !== wizard.fieldId) return f;
+            // Preserve type: "table" — only set static/dynamic for non-table fields
+            const newType = f.type === 'table'
+              ? 'table' as const
+              : wizard.targetMode === 'static' ? 'static' as const : 'dynamic' as const;
+            return {
+              ...f,
+              type: newType,
+              anchor_mode: wizard.targetMode,
+              anchors: completedAnchors,
+              anchor_region: primaryAnchor?.region,
+              expected_anchor_text: primaryAnchor?.expected_text,
+              chain: defaultChains[wizard.targetMode](),
+            };
+          }),
         };
       }
 
@@ -392,6 +471,122 @@ export const useAppStore = create<AppState>((set) => ({
     }),
 
   cancelAnchorWizard: () => set({ anchorWizard: null }),
+
+  // Table wizard actions
+  startTableWizard: (fieldId) =>
+    set({ tableWizard: { fieldId, phase: 'bounds', tableBounds: null, columns: [], keyColumnId: null } }),
+
+  completeTableBounds: (region) =>
+    set((state) => {
+      if (!state.tableWizard) return {};
+      // Auto-create first column at table left edge
+      const firstCol: TableColumn = { id: crypto.randomUUID(), label: 'Column 1', x: region.x };
+      return {
+        tableWizard: {
+          ...state.tableWizard,
+          phase: 'dividers' as const,
+          tableBounds: region,
+          columns: [firstCol],
+        },
+      };
+    }),
+
+  addTableDivider: (x) =>
+    set((state) => {
+      if (!state.tableWizard || !state.tableWizard.tableBounds) return {};
+      const bounds = state.tableWizard.tableBounds;
+      // Clamp x within table bounds
+      if (x <= bounds.x || x >= bounds.x + bounds.width) return {};
+      const newCol: TableColumn = {
+        id: crypto.randomUUID(),
+        label: `Column ${state.tableWizard.columns.length + 1}`,
+        x,
+      };
+      const columns = [...state.tableWizard.columns, newCol].sort((a, b) => a.x - b.x);
+      // Re-label columns sequentially
+      columns.forEach((c, i) => { c.label = `Column ${i + 1}`; });
+      return { tableWizard: { ...state.tableWizard, columns } };
+    }),
+
+  removeTableDivider: (columnId) =>
+    set((state) => {
+      if (!state.tableWizard) return {};
+      // Don't remove the first column (table left edge)
+      const cols = state.tableWizard.columns;
+      if (cols.length <= 1) return {};
+      const idx = cols.findIndex(c => c.id === columnId);
+      if (idx === 0) return {}; // Can't remove first column
+      const columns = cols.filter(c => c.id !== columnId);
+      columns.forEach((c, i) => { c.label = `Column ${i + 1}`; });
+      return { tableWizard: { ...state.tableWizard, columns } };
+    }),
+
+  updateTableDividerX: (columnId, x) =>
+    set((state) => {
+      if (!state.tableWizard || !state.tableWizard.tableBounds) return {};
+      const bounds = state.tableWizard.tableBounds;
+      const clampedX = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width));
+      const columns = state.tableWizard.columns
+        .map(c => c.id === columnId ? { ...c, x: clampedX } : c)
+        .sort((a, b) => a.x - b.x);
+      return { tableWizard: { ...state.tableWizard, columns } };
+    }),
+
+  updateTableColumnLabel: (columnId, label) =>
+    set((state) => {
+      if (!state.tableWizard) return {};
+      return {
+        tableWizard: {
+          ...state.tableWizard,
+          columns: state.tableWizard.columns.map(c =>
+            c.id === columnId ? { ...c, label } : c
+          ),
+        },
+      };
+    }),
+
+  setTableWizardPhase: (phase) =>
+    set((state) => {
+      if (!state.tableWizard) return {};
+      return { tableWizard: { ...state.tableWizard, phase } };
+    }),
+
+  setTableKeyColumn: (columnId) =>
+    set((state) => {
+      if (!state.tableWizard) return {};
+      return { tableWizard: { ...state.tableWizard, keyColumnId: columnId } };
+    }),
+
+  finishTableWizard: () =>
+    set((state) => {
+      const wiz = state.tableWizard;
+      if (!wiz || !wiz.tableBounds || wiz.columns.length === 0) return { tableWizard: null };
+      const tableConfig: TableConfig = {
+        table_region: wiz.tableBounds,
+        columns: wiz.columns,
+        header_row: true,
+        key_column_id: wiz.keyColumnId ?? undefined,
+      };
+      return {
+        tableWizard: null,
+        fields: state.fields.map(f =>
+          f.id === wiz.fieldId
+            ? { ...f, table_config: tableConfig }
+            : f
+        ),
+      };
+    }),
+
+  cancelTableWizard: () =>
+    set((state) => {
+      const wiz = state.tableWizard;
+      if (!wiz) return {};
+      // Remove the field if wizard is cancelled (it was created empty)
+      return {
+        tableWizard: null,
+        fields: state.fields.filter(f => f.id !== wiz.fieldId),
+      };
+    }),
 
   // Comparison mode actions
   setPdfB: (pdfId, pageCount, filename) =>
@@ -422,4 +617,59 @@ export const useAppStore = create<AppState>((set) => ({
   setConnectDragFrom: (from) => set({ connectDragFrom: from }),
   setConnectDragMouse: (pos) => set({ connectDragMouse: pos }),
   setPendingConnection: (conn) => set({ pendingConnection: conn }),
+
+  // Saved test runs
+  savedTestRuns: [],
+  setSavedTestRuns: (runs) => set({ savedTestRuns: runs }),
+  addSavedTestRun: (run) => set((s) => ({ savedTestRuns: [run, ...s.savedTestRuns] })),
+  removeSavedTestRun: (runId) => set((s) => ({ savedTestRuns: s.savedTestRuns.filter((r) => r.id !== runId) })),
+
+  // Template-level rules
+  templateRules: [],
+  computedFields: [],
+  templateRuleResults: [],
+  computedValues: {},
+  rightPanelTab: "rules",
+  rightPanelCollapsed: false,
+
+  // React Flow state
+  ruleNodes: [],
+  ruleEdges: [],
+  setRuleNodes: (nodes) => set({ ruleNodes: nodes }),
+  setRuleEdges: (edges) => set({ ruleEdges: edges }),
+
+  addTemplateRule: (rule) =>
+    set((s) => ({ templateRules: [...s.templateRules, rule] })),
+
+  updateTemplateRule: (ruleId, updates) =>
+    set((s) => ({
+      templateRules: s.templateRules.map((r) =>
+        r.id === ruleId ? { ...r, ...updates } : r
+      ),
+    })),
+
+  removeTemplateRule: (ruleId) =>
+    set((s) => ({
+      templateRules: s.templateRules.filter((r) => r.id !== ruleId),
+      computedFields: s.computedFields.filter((cf) => cf.rule_id !== ruleId),
+    })),
+
+  setTemplateRules: (rules) => set({ templateRules: rules }),
+
+  addComputedField: (field) =>
+    set((s) => ({ computedFields: [...s.computedFields, field] })),
+
+  removeComputedField: (fieldId) =>
+    set((s) => ({ computedFields: s.computedFields.filter((cf) => cf.id !== fieldId) })),
+
+  setComputedFields: (fields) => set({ computedFields: fields }),
+
+  setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
+
+  toggleRightPanel: () =>
+    set((s) => ({ rightPanelCollapsed: !s.rightPanelCollapsed })),
+
+  setTemplateRuleResults: (results) => set({ templateRuleResults: results }),
+
+  setComputedValues: (values) => set({ computedValues: values }),
 }));

@@ -1,1 +1,118 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* BCS Design System - Matching bcs-hr.com */
+
+@layer base {
+  :root {
+    /* BCS Magenta - #DE1380 */
+    --background: 0 0% 100%;
+    --foreground: 220 15% 18%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 18%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 18%;
+
+    /* BCS Magenta - #DE1380 */
+    --primary: 330 83% 47%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 15% 18%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    /* Soft pink accent */
+    --accent: 330 80% 97%;
+    --accent-foreground: 330 83% 40%;
+
+    /* Teal success */
+    --success: 174 70% 40%;
+    --success-foreground: 0 0% 100%;
+
+    /* Orange warning */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 330 83% 47%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar - Dark */
+    --sidebar-background: 220 20% 16%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 330 83% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 16% 22%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 16% 22%;
+    --sidebar-ring: 330 83% 52%;
+    --sidebar-muted: 220 10% 58%;
+  }
+
+  .dark {
+    --background: 220 20% 7%;
+    --foreground: 220 14% 95%;
+
+    --card: 220 20% 10%;
+    --card-foreground: 220 14% 95%;
+
+    --popover: 220 20% 10%;
+    --popover-foreground: 220 14% 95%;
+
+    --primary: 330 83% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 20% 14%;
+    --secondary-foreground: 220 14% 95%;
+
+    --muted: 220 20% 14%;
+    --muted-foreground: 220 10% 58%;
+
+    --accent: 330 50% 18%;
+    --accent-foreground: 330 83% 78%;
+
+    --success: 174 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 0%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 330 83% 52%;
+
+    --sidebar-background: 220 25% 6%;
+    --sidebar-foreground: 220 14% 95%;
+    --sidebar-primary: 330 83% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 12%;
+    --sidebar-accent-foreground: 220 14% 95%;
+    --sidebar-border: 220 20% 14%;
+    --sidebar-ring: 330 83% 52%;
+    --sidebar-muted: 220 10% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Jost', system-ui, -apple-system, sans-serif;
+  }
+}

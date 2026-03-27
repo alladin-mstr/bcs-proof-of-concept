@@ -236,17 +236,21 @@ bcs/
 │
 └── frontend/                 # React + TypeScript + Tailwind + Vite
     └── src/
-        ├── App.tsx                  # Main layout, header, files dropdown, upload modal, auto-load first PDF
+        ├── App.tsx                  # Router: Dashboard, Clients, NewControl, NewTemplate, Gallery, Settings, Results, etc.
+        ├── pages/
+        │   ├── NewTemplate.tsx       # Renders TemplateBuilder
+        │   └── ...                   # Dashboard, Clients, ClientDetail, NewControl, Gallery, Settings, Results, Login, etc.
         ├── components/
-        │   ├── PdfUploader.tsx       # Standalone upload component (used as fallback, not primary)
-        │   ├── PdfViewer.tsx         # react-pdf + toolbar (zoom/pan/hide markers) — single mode
-        │   ├── ComparisonCanvas.tsx  # React Flow canvas with two PdfNode nodes — comparison mode
+        │   ├── TemplateBuilder.tsx   # Main template editor: compact toolbar, PDF viewer, sidebar, results panel (dark mode)
+        │   ├── PdfViewer.tsx         # react-pdf + zoom (single mode)
+        │   ├── ComparisonCanvas.tsx  # Side-by-side PDF panes with connection overlay (comparison mode)
         │   ├── ComparisonFieldsPanel.tsx # Two-column drag-to-connect field linking UI
         │   ├── BboxCanvas.tsx        # SVG overlay: fields, multi-anchor rendering, area shading, ghost boxes, shift arrows, wizard banner
-        │   ├── TemplatePanel.tsx     # Sidebar: 3 modes, anchor tier selector, fields/connections tabs, templates
-        │   ├── ExtractionResults.tsx # Right panel: test results + chain traces
+        │   ├── TemplatePanel.tsx     # Sidebar: 3 modes, anchor tier selector, fields/connections tabs, templates (dark mode)
+        │   ├── ExtractionResults.tsx # Right panel: test results + chain traces (dark mode)
         │   ├── ChainEditor.tsx       # Unified rules & chain editor (search + value + validate steps, icons, tooltips)
-        │   └── RulesEditor.tsx       # Legacy inline rule editor (no longer shown in UI)
+        │   ├── layout/AppLayout.tsx  # App shell: sidebar nav, top bar, theme toggle
+        │   └── layout/AppSidebar.tsx # Navigation sidebar (Controles, Klanten, Templates, etc.)
         ├── store/appStore.ts         # Zustand: fields, templates, results, anchor wizard, chain edit, drag state, comparison mode
         ├── hooks/useBboxDrawing.ts   # Mouse drag → rectangle
         ├── api/client.ts             # All backend API calls (upload, list, delete PDFs + templates + extract)
@@ -507,3 +511,20 @@ class Anchor(BaseModel):
 19. **Layout overlay tooltip clipped by sidebar** — Tooltip rendered inside the sidebar div which had `overflow-y: auto`. Fixed by rendering tooltips via `createPortal(...)` to `document.body` with `position: fixed`.
 20. **Area text captured adjacent columns** — `area_text_value` used full page width, so "Ship To" area also captured "Bill To" content in side-by-side layouts. Fixed by constraining the extraction region's x-range to the value box's x position and width.
 21. **Anchor wizard required manual text typing** — Users had to type the anchor text when drawing, leading to typos and confusion (entering labels instead of actual PDF text). Fixed by auto-extracting text from the drawn region via the `extractRegion` API.
+
+---
+
+## Phase 7: UI Polish & Dark Mode
+
+### Changes
+
+**HTML title:** Changed from "PDF Data Extractor" to "BCS HR Software - De Controle Omgeving" (`index.html`).
+
+**Removed "PDF Data Extractor" header:** The large icon + title bar is gone from `TemplateBuilder.tsx`. Replaced with a slim compact toolbar: filename on the left, page/zoom/markers center, Files/Upload right. Outer padding on the main content area removed — the PDF viewer now fills the available space edge-to-edge.
+
+**Dark mode compatibility:** Added `dark:` Tailwind variants to the template builder UI:
+- `TemplateBuilder.tsx`: All backgrounds (`dark:bg-gray-900`, `dark:bg-gray-800`), borders (`dark:border-gray-700`), text colors (`dark:text-gray-300`), hover states, file dropdown, upload modal
+- `TemplatePanel.tsx`: Sidebar container (`dark:bg-gray-800 dark:border-gray-700`)
+- `ExtractionResults.tsx`: Results panel (`dark:bg-gray-800 dark:border-gray-700`)
+
+The app respects the system/user theme preference set via the `ThemeProvider` (stored in `bcs-ui-theme` localStorage key). Dark mode is inherited from the existing `ThemeProvider` wrapping the app — no new theme infrastructure needed.

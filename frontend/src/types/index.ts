@@ -6,12 +6,24 @@ export interface Region {
   height: number;
 }
 
-export type CompareOperator = "less_than" | "greater_than" | "equals" | "not_equals" | "less_or_equal" | "greater_or_equal";
+export type CompareOperator =
+  | "less_than" | "greater_than" | "equals" | "not_equals" | "less_or_equal" | "greater_or_equal"
+  | "contains" | "not_contains" | "starts_with" | "ends_with"
+  | "in_array" | "not_in_array"
+  | "matches_regex"
+  | "is_empty" | "is_not_empty"
+  | "date_before" | "date_after" | "date_between";
+export type DataType = "string" | "number" | "integer" | "date" | "currency";
+export type MathOperation = "add" | "subtract" | "multiply" | "divide"
+  | "modulo" | "abs" | "round" | "min" | "max" | "sum" | "average";
+export type AggregateOperation = "sum" | "average" | "count" | "min" | "max";
+export type RowFilterMode = "count" | "all_pass" | "any_pass";
+export type CrossTemplateResolution = "latest_run" | "specific_run" | "live";
 
 export interface Rule {
   type: "exact_match" | "data_type" | "range" | "one_of" | "pattern" | "not_empty" | "date_before" | "date_after" | "compare_field";
   expected_value?: string;
-  data_type?: "string" | "number" | "integer" | "date" | "currency";
+  data_type?: DataType;
   min_value?: number;
   max_value?: number;
   allowed_values?: string[];
@@ -19,15 +31,128 @@ export interface Rule {
   date_threshold?: string;
   compare_field_label?: string;
   compare_operator?: CompareOperator;
+  compare_test_run_id?: string;
+}
+
+// --- Template-level rules system ---
+
+export interface FieldRef {
+  template_id?: string;
+  template_name?: string;
+  field_label: string;
+  resolution?: CrossTemplateResolution;
+  test_run_id?: string;
+}
+
+export type RuleOperand =
+  | { type: "field_ref"; ref: FieldRef }
+  | { type: "literal"; value: string; datatype?: DataType }
+  | { type: "computed_ref"; computed_id: string }
+  | { type: "column_ref"; ref: FieldRef; column_label: string };
+
+export interface Condition {
+  operand_a: RuleOperand;
+  operator: CompareOperator;
+  operand_b: RuleOperand;
+  then_value: RuleOperand;
+  else_value: RuleOperand;
+}
+
+export interface ValidationConfig {
+  rule_type: Rule["type"];
+  operand_a: RuleOperand;
+  operand_b?: RuleOperand;
+  operator?: CompareOperator;
+  expected_value?: string;
+  data_type?: DataType;
+  min_value?: number;
+  max_value?: number;
+  allowed_values?: string[];
+  regex?: string;
+  date_threshold?: string;
+}
+
+export interface ComputationConfig {
+  operation: MathOperation | AggregateOperation;
+  operands: RuleOperand[];
+  output_label: string;
+  output_datatype?: DataType;
+  condition?: Condition;
+  row_filter_mode?: RowFilterMode;
+}
+
+export interface TemplateRule {
+  id: string;
+  name: string;
+  type: "validation" | "computation";
+  enabled: boolean;
+  validation?: ValidationConfig;
+  computation?: ComputationConfig;
+}
+
+export interface ComputedField {
+  id: string;
+  label: string;
+  template_id: string;
+  rule_id: string;
+  datatype?: DataType;
+}
+
+export interface TemplateRuleResult {
+  rule_id: string;
+  rule_name: string;
+  passed: boolean;
+  message: string;
+  computed_value?: string;
+}
+
+// --- React Flow node types for Rules editor ---
+
+export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter";
+
+export interface RuleNodeData {
+  label: string;
+  nodeType: RuleNodeType;
+  // field_input: which field this references
+  fieldRef?: FieldRef;
+  // literal_input: constant value
+  literalValue?: string;
+  literalDatatype?: DataType;
+  // math_operation: which op
+  mathOperation?: MathOperation;
+  // comparison: operator
+  comparisonOperator?: CompareOperator;
+  // validation: rule type
+  validationRuleType?: Rule["type"];
+  validationConfig?: Partial<ValidationConfig>;
+  // computed_output: output label and type
+  outputLabel?: string;
+  outputDatatype?: DataType;
+  // condition: if/then/else
+  condition?: Condition;
+  // field metadata
+  fieldType?: "static" | "dynamic" | "table";
+  tablePreview?: string[][];  // [[col1, col2], [val1, val2], ...] for tooltip
+  // table_column: which table field + column
+  tableFieldRef?: FieldRef;
+  tableColumnLabel?: string;
+  tableColumnId?: string;
+  // table_aggregate: operation + optional column selection (when source is a table field_input)
+  aggregateOperation?: AggregateOperation;
+  selectedColumnLabel?: string;
+  // table_row_filter: mode
+  rowFilterMode?: RowFilterMode;
+  // Last evaluated value (for display)
+  lastValue?: string;
+  lastPassed?: boolean;
 }
 
 // --- Chain step types ---
 
-export type ChainStepCategory = "search" | "value" | "validate";
+export type ChainStepCategory = "search" | "value";
 
 export type SearchStepType = "exact_position" | "vertical_slide" | "full_page_search" | "region_search" | "block_search" | "bracket_search" | "area_search";
 export type ValueStepType = "offset_value" | "adjacent_scan" | "block_value" | "intersection_value" | "area_text_value";
-export type ValidateStepType = "not_empty" | "exact_match" | "data_type" | "range" | "one_of" | "pattern" | "date_before" | "date_after" | "compare_field";
 
 export interface ChainStep {
   id: string;
@@ -40,16 +165,6 @@ export interface ChainStep {
   block_extract_mode?: "same_block" | "rest_of_block" | "next_block";
   // Value config
   search_direction?: string;
-  // Validate config
-  expected_value?: string;
-  data_type?: "string" | "number" | "integer" | "date" | "currency";
-  min_value?: number;
-  max_value?: number;
-  allowed_values?: string[];
-  regex?: string;
-  date_threshold?: string;
-  compare_field_label?: string;
-  compare_operator?: CompareOperator;
 }
 
 export interface StepTrace {
@@ -71,19 +186,38 @@ export interface Anchor {
   expected_text: string;
 }
 
+export interface TableColumn {
+  id: string;
+  label: string;
+  x: number;
+}
+
+export type TableEndAnchorMode = "none" | "text" | "end_of_page";
+
+export interface TableConfig {
+  table_region: Region;
+  columns: TableColumn[];
+  header_row: boolean;
+  key_column_id?: string;
+  end_anchor_mode?: TableEndAnchorMode;
+  end_anchor_text?: string;
+}
+
 export interface Field {
   id: string;
   label: string;
-  type: "static" | "dynamic";
+  type: "static" | "dynamic" | "table";
   anchor_mode: AnchorMode;
   anchors: Anchor[];
   value_region: Region;
-  anchor_region?: Region;           // Legacy: single anchor
-  expected_anchor_text?: string;    // Legacy: single anchor text
-  rules: Rule[];
-  value_format?: "currency" | "number" | "integer" | "date" | "string";
+  anchor_region?: Region;
+  expected_anchor_text?: string;
+  rules: Rule[];                            // Legacy field-level rules (backward compat)
+  value_format?: DataType;
+  detected_datatype?: DataType;
   chain: ChainStep[];
   source?: "a" | "b";
+  table_config?: TableConfig;
 }
 
 export interface Template {
@@ -92,6 +226,9 @@ export interface Template {
   fields: Field[];
   created_at: string;
   mode?: "single" | "comparison";
+  rules: TemplateRule[];
+  computed_fields: ComputedField[];
+  rule_graph?: { nodes: unknown[]; edges: unknown[] };
 }
 
 export interface RuleResult {
@@ -100,9 +237,11 @@ export interface RuleResult {
   message: string;
 }
 
+export type TableRow = Record<string, string>;
+
 export interface FieldResult {
   label: string;
-  field_type: "static" | "dynamic";
+  field_type: "static" | "dynamic" | "table";
   value: string;
   status: "ok" | "anchor_mismatch" | "anchor_not_found" | "anchor_shifted" | "anchor_relocated" | "empty" | "rule_failed";
   source?: "a" | "b";
@@ -114,10 +253,12 @@ export interface FieldResult {
   value_found_x?: number;
   value_found_y?: number;
   value_found_width?: number;
-  // Found anchor positions: role → {x, y, text, width, height} (normalized)
   anchors_found?: Record<string, { x: number; y: number; text: string; width: number; height: number }>;
+  table_data?: TableRow[];
+  resolved_table_height?: number;
   rule_results: RuleResult[];
   step_traces: StepTrace[];
+  detected_datatype?: DataType;
 }
 
 export interface ExtractionResponse {
@@ -126,6 +267,8 @@ export interface ExtractionResponse {
   results: FieldResult[];
   needs_review: boolean;
   pdf_id_b?: string;
+  template_rule_results: TemplateRuleResult[];
+  computed_values: Record<string, string>;
 }
 
 // Layout analysis types
@@ -139,4 +282,21 @@ export interface LayoutBlock {
   text: string;
   bbox: { x: number; y: number; width: number; height: number };
   lines: LayoutLine[];
+}
+
+export interface TestRunEntry {
+  label: string;
+  value: string;
+  status: string;
+  table_data?: Record<string, string>[];
+}
+
+export interface TestRun {
+  id: string;
+  pdf_id: string;
+  pdf_filename: string;
+  template_name?: string;
+  template_id?: string;
+  entries: TestRunEntry[];
+  created_at: string;
 }

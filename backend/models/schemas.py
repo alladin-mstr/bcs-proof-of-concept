@@ -12,25 +12,34 @@ class Region(BaseModel):
     height: float
 
 
+CompareOperator = Literal[
+    "less_than", "greater_than", "equals", "not_equals", "less_or_equal", "greater_or_equal",
+    "contains", "not_contains", "starts_with", "ends_with",
+    "in_array", "not_in_array",
+    "matches_regex",
+    "is_empty", "is_not_empty",
+    "date_before", "date_after", "date_between",
+]
+DataType = Literal["string", "number", "integer", "date", "currency"]
+MathOperation = Literal["add", "subtract", "multiply", "divide", "modulo", "abs", "round", "min", "max", "sum", "average"]
+AggregateOperation = Literal["agg_sum", "agg_average", "agg_count", "agg_min", "agg_max"]
+RowFilterMode = Literal["count", "all_pass", "any_pass"]
+CrossTemplateResolution = Literal["latest_run", "specific_run", "live"]
+
+
 class Rule(BaseModel):
-    """A validation rule for a field's extracted value."""
+    """A legacy field-level validation rule (kept for backward compatibility)."""
     type: Literal["exact_match", "data_type", "range", "one_of", "pattern", "not_empty", "date_before", "date_after", "compare_field"]
-    # exact_match: value must equal this exactly
     expected_value: str | None = None
-    # data_type: value must parse as this type
-    data_type: Literal["string", "number", "integer", "date", "currency"] | None = None
-    # range: numeric value must be within bounds
+    data_type: DataType | None = None
     min_value: float | None = None
     max_value: float | None = None
-    # one_of: value must be one of these
     allowed_values: list[str] | None = None
-    # pattern: value must match this regex
     regex: str | None = None
-    # date_before / date_after: date must be before/after this date (ISO format YYYY-MM-DD)
     date_threshold: str | None = None
-    # compare_field: compare this field's value against another field
     compare_field_label: str | None = None
-    compare_operator: Literal["less_than", "greater_than", "equals", "not_equals", "less_or_equal", "greater_or_equal"] | None = None
+    compare_operator: CompareOperator | None = None
+    compare_test_run_id: str | None = None
 
 
 class RuleResult(BaseModel):
@@ -38,6 +47,90 @@ class RuleResult(BaseModel):
     rule_type: str
     passed: bool
     message: str
+
+
+# --- Template-level rules system ---
+
+class FieldRef(BaseModel):
+    """Reference to a field, possibly in another template."""
+    template_id: str | None = None          # omit for current template
+    template_name: str | None = None        # display name
+    field_label: str
+    resolution: CrossTemplateResolution | None = None  # for cross-template refs
+    test_run_id: str | None = None          # when resolution = "specific_run"
+
+
+class RuleOperand(BaseModel):
+    """An operand in a rule expression."""
+    type: Literal["field_ref", "literal", "computed_ref", "column_ref"]
+    ref: FieldRef | None = None             # when type = "field_ref" or "column_ref"
+    value: str | None = None                # when type = "literal"
+    datatype: DataType | None = None        # when type = "literal"
+    computed_id: str | None = None          # when type = "computed_ref"
+    column_label: str | None = None         # when type = "column_ref"
+
+
+class Condition(BaseModel):
+    """Conditional expression (if/then/else)."""
+    operand_a: RuleOperand
+    operator: CompareOperator
+    operand_b: RuleOperand
+    then_value: RuleOperand
+    else_value: RuleOperand
+
+
+class ValidationConfig(BaseModel):
+    """Configuration for a validation rule."""
+    rule_type: Literal["exact_match", "data_type", "range", "one_of", "pattern", "not_empty", "date_before", "date_after", "compare_field"]
+    operand_a: RuleOperand
+    operand_b: RuleOperand | None = None
+    operator: CompareOperator | None = None
+    # Inline config for simple rules
+    expected_value: str | None = None
+    data_type: DataType | None = None
+    min_value: float | None = None
+    max_value: float | None = None
+    allowed_values: list[str] | None = None
+    regex: str | None = None
+    date_threshold: str | None = None
+
+
+class ComputationConfig(BaseModel):
+    """Configuration for a computation rule."""
+    operation: str  # MathOperation | AggregateOperation | "row_filter"
+    operands: list[RuleOperand]
+    output_label: str
+    output_datatype: DataType | None = None
+    condition: Condition | None = None      # for if/then/else
+    row_filter_mode: RowFilterMode | None = None  # for row_filter operation
+
+
+class TemplateRule(BaseModel):
+    """A template-level rule (validation or computation)."""
+    id: str
+    name: str
+    type: Literal["validation", "computation"]
+    enabled: bool = True
+    validation: ValidationConfig | None = None
+    computation: ComputationConfig | None = None
+
+
+class ComputedField(BaseModel):
+    """A computed field produced by a computation rule."""
+    id: str
+    label: str
+    template_id: str
+    rule_id: str
+    datatype: DataType | None = None
+
+
+class TemplateRuleResult(BaseModel):
+    """Result of evaluating a template-level rule."""
+    rule_id: str
+    rule_name: str
+    passed: bool
+    message: str
+    computed_value: str | None = None       # for computation rules
 
 
 # --- Chain step system ---
@@ -56,9 +149,9 @@ class LayoutBlock(BaseModel):
 
 
 class ChainStep(BaseModel):
-    """One step in a configurable chain pipeline."""
+    """One step in a configurable chain pipeline (search + value only)."""
     id: str
-    category: Literal["search", "value", "validate"]
+    category: Literal["search", "value", "validate"]  # validate kept for backward compat
     type: str  # Step type within category
     # Search step config
     slide_tolerance: float | None = None        # vertical_slide: default 0.3
@@ -67,16 +160,17 @@ class ChainStep(BaseModel):
     block_extract_mode: Literal["same_block", "rest_of_block", "next_block"] | None = None
     # Value step config
     search_direction: str | None = None         # adjacent_scan: "right" or "below"
-    # Validate step config (mirrors Rule fields)
+    # Legacy validate step config (kept for backward compat, ignored in new system)
     expected_value: str | None = None
-    data_type: Literal["string", "number", "integer", "date", "currency"] | None = None
+    data_type: DataType | None = None
     min_value: float | None = None
     max_value: float | None = None
     allowed_values: list[str] | None = None
     regex: str | None = None
     date_threshold: str | None = None
     compare_field_label: str | None = None
-    compare_operator: Literal["less_than", "greater_than", "equals", "not_equals", "less_or_equal", "greater_or_equal"] | None = None
+    compare_operator: CompareOperator | None = None
+    compare_test_run_id: str | None = None
 
 
 class StepTrace(BaseModel):
@@ -97,30 +191,39 @@ class Anchor(BaseModel):
     expected_text: str
 
 
+class TableColumn(BaseModel):
+    """A column defined by its left-edge x position within a table."""
+    id: str
+    label: str              # User-provided column header label
+    x: float                # Normalized x position of left edge (0-1, page-relative)
+
+
+class TableConfig(BaseModel):
+    """Configuration for a table field."""
+    table_region: Region            # Full table bounding box
+    columns: list[TableColumn] = [] # Sorted by x; widths derived from gaps between adjacent columns
+    header_row: bool = True         # Whether first detected row is a header
+    key_column_id: str | None = None  # Column that always has data; rows where this col is empty merge upward
+    end_anchor_mode: Literal["none", "text", "end_of_page"] = "none"  # How to determine table bottom
+    end_anchor_text: str | None = None  # Text that marks end of table (when mode = "text")
+
+
 class Field(BaseModel):
     """A labeled extraction field in a template."""
     id: str
     label: str
-    type: Literal["static", "dynamic"]
-    # Anchor tier: static (no anchors), single (1), bracket (2 intersection),
-    # area_value (2 area boundaries = value between), area_locator (2 area + 1 locator),
-    # area_bracket (2 area + 2 bracket intersection inside area)
+    type: Literal["static", "dynamic", "table"]
     anchor_mode: Literal["static", "single", "bracket", "area_value", "area_locator", "area_bracket"] = "static"
-    # Structured anchors list (new system)
     anchors: list[Anchor] = []
-    # Static fields: just a value_region
-    # Dynamic fields: anchor_region + value_region + expected_anchor_text
     value_region: Region
-    anchor_region: Region | None = None         # Legacy: single anchor region
-    expected_anchor_text: str | None = None      # Legacy: single anchor text
-    rules: list[Rule] = []
-    # Auto-detected format of the value from the template PDF
-    # Used to find the right value when anchor is relocated
-    value_format: Literal["currency", "number", "integer", "date", "string"] | None = None
-    # Configurable chain pipeline (replaces hardcoded logic when non-empty)
+    anchor_region: Region | None = None
+    expected_anchor_text: str | None = None
+    rules: list[Rule] = []                  # Legacy field-level rules (kept for backward compat)
+    value_format: DataType | None = None
+    detected_datatype: DataType | None = None  # Auto-detected datatype after extraction
     chain: list[ChainStep] = []
-    # Comparison mode: which PDF this field belongs to
     source: Literal["a", "b"] = "a"
+    table_config: TableConfig | None = None
 
 
 class DetectFormatRequest(BaseModel):
@@ -132,6 +235,9 @@ class TemplateCreate(BaseModel):
     name: str
     fields: list[Field]
     mode: Literal["single", "comparison"] = "single"
+    rules: list[TemplateRule] = []
+    computed_fields: list[ComputedField] = []
+    rule_graph: dict | None = None  # React Flow {nodes, edges} for visual persistence
 
 
 class Template(BaseModel):
@@ -140,12 +246,17 @@ class Template(BaseModel):
     fields: list[Field]
     created_at: datetime
     mode: Literal["single", "comparison"] = "single"
+    rules: list[TemplateRule] = []
+    computed_fields: list[ComputedField] = []
+    rule_graph: dict | None = None  # React Flow {nodes, edges} for visual persistence
 
 
 class TestRequest(BaseModel):
     pdf_id: str
     fields: list[Field]
     pdf_id_b: str | None = None
+    rules: list[TemplateRule] = []
+    computed_fields: list[ComputedField] = []
 
 
 class ExtractionRequest(BaseModel):
@@ -156,29 +267,59 @@ class ExtractionRequest(BaseModel):
 
 class FieldResult(BaseModel):
     label: str
-    field_type: Literal["static", "dynamic"]
+    field_type: Literal["static", "dynamic", "table"]
     value: str
     status: Literal["ok", "anchor_mismatch", "anchor_not_found", "anchor_shifted", "anchor_relocated", "empty", "rule_failed"]
     source: Literal["a", "b"] = "a"
-    # For dynamic fields:
     expected_anchor: str | None = None
     actual_anchor: str | None = None
-    anchor_shift: str | None = None  # Human-readable description of how anchor was found
-    anchor_dx: float | None = None   # Normalized horizontal shift applied
-    anchor_dy: float | None = None   # Normalized vertical shift applied
-    # When value was found via adjacent scan (not offset), these are the actual normalized coords
+    anchor_shift: str | None = None
+    anchor_dx: float | None = None
+    anchor_dy: float | None = None
     value_found_x: float | None = None
     value_found_y: float | None = None
     value_found_width: float | None = None
-    # Found anchor positions: role → {x, y, text, width, height} (normalized)
     anchors_found: dict[str, dict] = {}
+    table_data: list[dict] | None = None
+    resolved_table_height: float | None = None  # Actual table height after end-anchor resolution
     rule_results: list[RuleResult] = []
     step_traces: list[StepTrace] = []
+    detected_datatype: DataType | None = None  # Auto-detected datatype
 
 
 class ExtractionResponse(BaseModel):
     pdf_id: str
     template_id: str
     results: list[FieldResult]
-    needs_review: bool   # True if any field has non-ok status
+    needs_review: bool
     pdf_id_b: str | None = None
+    template_rule_results: list[TemplateRuleResult] = []
+    computed_values: dict[str, str] = {}
+
+
+class TestRunEntry(BaseModel):
+    """A single field's extracted key-value pair from a test run."""
+    label: str
+    value: str
+    status: str
+    table_data: list[dict[str, str]] | None = None  # For table fields: row data
+
+
+class TestRunCreate(BaseModel):
+    """Request body to save a test run."""
+    pdf_id: str
+    pdf_filename: str
+    template_name: str | None = None
+    template_id: str | None = None
+    entries: list[TestRunEntry]
+
+
+class TestRun(BaseModel):
+    """A persisted test run with extracted key-value pairs."""
+    id: str
+    pdf_id: str
+    pdf_filename: str
+    template_name: str | None = None
+    template_id: str | None = None
+    entries: list[TestRunEntry]
+    created_at: datetime

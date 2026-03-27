@@ -68,12 +68,12 @@ export default function PdfUploader() {
         className={`
           flex flex-col items-center justify-center w-full max-w-lg p-12
           border-2 border-dashed rounded-2xl cursor-pointer transition-colors
-          ${isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'}
+          ${isDragOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-border bg-muted hover:border-muted-foreground/50 hover:bg-muted/80'}
         `}
         onClick={() => document.getElementById('pdf-file-input')?.click()}
       >
         <svg
-          className="w-12 h-12 text-gray-400 mb-4"
+          className="w-12 h-12 text-muted-foreground mb-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -86,13 +86,13 @@ export default function PdfUploader() {
           />
         </svg>
         {isUploading ? (
-          <p className="text-gray-600 font-medium">Uploading...</p>
+          <p className="text-foreground/70 font-medium">Uploading...</p>
         ) : (
           <>
-            <p className="text-gray-700 font-medium mb-1">
+            <p className="text-foreground font-medium mb-1">
               Drop a PDF here or click to upload
             </p>
-            <p className="text-gray-400 text-sm">PDF files only</p>
+            <p className="text-muted-foreground text-sm">PDF files only</p>
           </>
         )}
         {error && <p className="text-red-500 text-sm mt-3">{error}</p>}

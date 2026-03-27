@@ -249,7 +249,7 @@ export default function ComparisonFieldsPanel() {
         <div className="flex-1 p-1.5 space-y-1.5">
           <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wide px-1 mb-1">PDF A</div>
           {fieldsA.length === 0 ? (
-            <p className="text-[10px] text-gray-400 text-center py-3">Draw fields on PDF A</p>
+            <p className="text-[10px] text-muted-foreground text-center py-3">Draw fields on PDF A</p>
           ) : fieldsA.map((field) => (
             <FieldCard
               key={field.id} field={field} side="a" canEdit={canEdit}
@@ -271,7 +271,7 @@ export default function ComparisonFieldsPanel() {
         <div className="flex-1 p-1.5 space-y-1.5">
           <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide px-1 mb-1">PDF B</div>
           {fieldsB.length === 0 ? (
-            <p className="text-[10px] text-gray-400 text-center py-3">Draw fields on PDF B</p>
+            <p className="text-[10px] text-muted-foreground text-center py-3">Draw fields on PDF B</p>
           ) : fieldsB.map((field) => (
             <FieldCard
               key={field.id} field={field} side="b" canEdit={canEdit}
@@ -296,9 +296,9 @@ export default function ComparisonFieldsPanel() {
         if (!posA || !posB) return null;
         const midY = (posA.y + posB.y) / 2;
         return (
-          <div className="absolute left-1/2 -translate-x-1/2 z-20 bg-white rounded-lg shadow-lg border border-violet-200 p-2 w-56"
+          <div className="absolute left-1/2 -translate-x-1/2 z-20 bg-popover rounded-lg shadow-lg border border-violet-200 dark:border-violet-800 p-2 w-56"
             style={{ top: midY + 16 }}>
-            <div className="text-[10px] text-gray-500 mb-1.5">
+            <div className="text-[10px] text-muted-foreground mb-1.5">
               <span className="font-semibold text-blue-700">{conn.fieldA.label}</span>
               {' \u2194 '}
               <span className="font-semibold text-emerald-700">{conn.fieldB.label}</span>
@@ -308,7 +308,7 @@ export default function ComparisonFieldsPanel() {
                 <select
                   value={conn.operator}
                   onChange={(e) => handleChangeOperator(conn, e.target.value as CompareOperator)}
-                  className="w-full text-xs border border-gray-200 rounded px-2 py-1 mb-1.5"
+                  className="w-full text-xs border border-border rounded px-2 py-1 mb-1.5"
                 >
                   {OP_OPTIONS.map((op) => (
                     <option key={op.value} value={op.value}>{op.label}</option>
@@ -316,7 +316,7 @@ export default function ComparisonFieldsPanel() {
                 </select>
                 <div className="flex gap-1">
                   <button onClick={() => setEditingConn(null)}
-                    className="flex-1 text-[10px] text-gray-500 hover:text-gray-700 py-1">
+                    className="flex-1 text-[10px] text-muted-foreground hover:text-foreground py-1">
                     Done
                   </button>
                   <button onClick={() => handleDeleteConnection(conn)}
@@ -327,11 +327,11 @@ export default function ComparisonFieldsPanel() {
               </>
             ) : (
               <>
-                <p className="text-[10px] text-gray-400 italic mb-1">
+                <p className="text-[10px] text-muted-foreground italic mb-1">
                   {getOpLabel(conn.operator)} (via chain step — edit in Fields tab)
                 </p>
                 <button onClick={() => setEditingConn(null)}
-                  className="w-full text-[10px] text-gray-500 hover:text-gray-700 py-1">
+                  className="w-full text-[10px] text-muted-foreground hover:text-foreground py-1">
                   Done
                 </button>
               </>
@@ -348,8 +348,8 @@ export default function ComparisonFieldsPanel() {
         return (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setPendingConnect(null)} />
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-white rounded-xl shadow-2xl border border-violet-200 p-3 w-52">
-              <p className="text-xs text-gray-700 mb-2 text-center">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-popover rounded-xl shadow-2xl border border-violet-200 dark:border-violet-800 p-3 w-52">
+              <p className="text-xs text-foreground mb-2 text-center">
                 <span className="font-semibold">{fromField.label}</span>
                 {' \u2194 '}
                 <span className="font-semibold">{toField.label}</span>
@@ -357,13 +357,13 @@ export default function ComparisonFieldsPanel() {
               <div className="space-y-1">
                 {OP_OPTIONS.map((op) => (
                   <button key={op.value} onClick={() => confirmConnect(op.value)}
-                    className="w-full text-left px-2 py-1.5 text-xs rounded-lg hover:bg-violet-50 text-gray-700 hover:text-violet-700 transition-colors">
+                    className="w-full text-left px-2 py-1.5 text-xs rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/30 text-foreground hover:text-violet-700 transition-colors">
                     {op.label}
                   </button>
                 ))}
               </div>
               <button onClick={() => setPendingConnect(null)}
-                className="w-full mt-2 text-[10px] text-gray-400 hover:text-gray-600 text-center">
+                className="w-full mt-2 text-[10px] text-muted-foreground hover:text-foreground/70 text-center">
                 Cancel
               </button>
             </div>
@@ -395,8 +395,8 @@ function FieldCard({ field, side, canEdit, connectRef, onRemove, onConnectStart,
           : isDragTarget
             ? 'border-violet-200 bg-violet-50/30'
             : isA
-              ? 'bg-blue-50/50 border-blue-200'
-              : 'bg-emerald-50/50 border-emerald-200'
+              ? 'bg-blue-50/50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800'
+              : 'bg-emerald-50/50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800'
       }`}
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}
@@ -416,11 +416,11 @@ function FieldCard({ field, side, canEdit, connectRef, onRemove, onConnectStart,
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
             <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[8px] font-bold ${
-              field.type === 'static' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+              field.type === 'static' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
             }`}>{field.type === 'static' ? 'S' : 'D'}</span>
-            <span className="font-medium text-gray-800 truncate" title={field.label}>{field.label}</span>
+            <span className="font-medium text-foreground truncate" title={field.label}>{field.label}</span>
           </div>
-          <div className="text-[9px] text-gray-400 mt-0.5">Page {field.value_region.page}</div>
+          <div className="text-[9px] text-muted-foreground mt-0.5">Page {field.value_region.page}</div>
         </div>
         {/* Connect point on right for A, layout spacer for B */}
         {isA && (

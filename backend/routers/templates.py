@@ -48,3 +48,27 @@ async def remove_template(template_id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Template not found.")
     return {"detail": "Template deleted."}
+
+
+@router.get("/all-fields", response_model=list[dict])
+async def get_all_template_fields():
+    """Return all templates with their field labels and datatypes for cross-template references."""
+    templates = list_templates()
+    result = []
+    for t in templates:
+        fields = []
+        for f in t.fields:
+            entry: dict = {"label": f.label, "datatype": f.value_format or f.detected_datatype, "field_type": f.type}
+            if f.type == "table" and f.table_config:
+                entry["table_columns"] = [{"id": c.id, "label": c.label} for c in f.table_config.columns]
+            fields.append(entry)
+        computed = [
+            {"label": cf.label, "datatype": cf.datatype, "computed": True}
+            for cf in t.computed_fields
+        ]
+        result.append({
+            "template_id": t.id,
+            "template_name": t.name,
+            "fields": fields + computed,
+        })
+    return result

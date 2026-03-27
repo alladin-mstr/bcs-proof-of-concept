@@ -27,9 +27,19 @@ async def extract_data(request: ExtractionRequest):
         if request.pdf_id_b:
             with storage.pdf_temp_path(request.pdf_id_b) as path_b:
                 pdf_path_b = path_b
-                results = extract_all_fields(pdf_path, template.fields, pdf_path_b)
+                results, rule_results, computed_values = extract_all_fields(
+                    pdf_path, template.fields, pdf_path_b,
+                    template_rules=template.rules,
+                    computed_fields=template.computed_fields,
+                    template_id=template.id,
+                )
         else:
-            results = extract_all_fields(pdf_path, template.fields, None)
+            results, rule_results, computed_values = extract_all_fields(
+                pdf_path, template.fields, None,
+                template_rules=template.rules,
+                computed_fields=template.computed_fields,
+                template_id=template.id,
+            )
 
     needs_review = any(r.status not in ("ok",) for r in results)
 
@@ -39,6 +49,8 @@ async def extract_data(request: ExtractionRequest):
         results=results,
         needs_review=needs_review,
         pdf_id_b=request.pdf_id_b,
+        template_rule_results=rule_results,
+        computed_values=computed_values,
     )
 
 
@@ -54,9 +66,19 @@ async def test_extraction(request: TestRequest):
     with storage.pdf_temp_path(request.pdf_id) as pdf_path:
         if request.pdf_id_b:
             with storage.pdf_temp_path(request.pdf_id_b) as path_b:
-                results = extract_all_fields(pdf_path, request.fields, path_b)
+                results, rule_results, computed_values = extract_all_fields(
+                    pdf_path, request.fields, path_b,
+                    template_rules=request.rules,
+                    computed_fields=request.computed_fields,
+                    template_id="test",
+                )
         else:
-            results = extract_all_fields(pdf_path, request.fields, None)
+            results, rule_results, computed_values = extract_all_fields(
+                pdf_path, request.fields, None,
+                template_rules=request.rules,
+                computed_fields=request.computed_fields,
+                template_id="test",
+            )
 
     needs_review = any(r.status not in ("ok",) for r in results)
 
@@ -66,4 +88,6 @@ async def test_extraction(request: TestRequest):
         results=results,
         needs_review=needs_review,
         pdf_id_b=request.pdf_id_b,
+        template_rule_results=rule_results,
+        computed_values=computed_values,
     )

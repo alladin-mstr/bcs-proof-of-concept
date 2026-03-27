@@ -3,7 +3,8 @@
 Interprets a list[ChainStep] as an ordered pipeline:
 - "search" steps: if-else (first success wins, rest skipped)
 - "value" steps: if-else (first success wins, rest skipped)
-- "validate" steps: AND (all run, all must pass)
+
+Validation is now handled by the template-level rule engine (rule_engine.py).
 """
 
 from dataclasses import dataclass, field as dataclass_field
@@ -102,7 +103,11 @@ def execute_chain(chain: list[ChainStep], ctx: ChainContext) -> ChainContext:
                 value_resolved = True
 
         elif step.category == "validate":
-            _execute_validate_step(step, ctx)
+            # Legacy validate steps are now skipped — handled by rule_engine
+            ctx.step_traces.append(StepTrace(
+                step_id=step.id, step_type=step.type, category="validate",
+                resolved=False, detail="Skipped (validation moved to Rules panel)",
+            ))
 
     # If no search steps resolved but we have an anchor region, extract value at original position
     if not search_resolved and not value_resolved and ctx.field.anchor_region:
@@ -691,6 +696,7 @@ def _execute_validate_step(step: ChainStep, ctx: ChainContext) -> None:
         date_threshold=step.date_threshold,
         compare_field_label=step.compare_field_label,
         compare_operator=step.compare_operator,
+        compare_test_run_id=step.compare_test_run_id,
     )
 
     # Note: all_values will be injected by the caller for cross-field validation
@@ -713,36 +719,14 @@ def execute_field_chain(pdf_path: str, field: Field, all_values: dict[str, str] 
     """
     ctx = ChainContext(pdf_path=pdf_path, field=field)
 
-    # Separate steps by category
+    # Separate steps by category (validate steps are now handled by rule_engine)
     search_steps = [s for s in field.chain if s.category == "search"]
     value_steps = [s for s in field.chain if s.category == "value"]
-    validate_steps = [s for s in field.chain if s.category == "validate"]
 
-    # For static fields, just extract the value and run validation
+    # For static fields, just extract the value
     if field.type == "static":
         ctx.value = extract_text_from_region(pdf_path, field.value_region)
-        # Run validation steps
-        for step in validate_steps:
-            # Inject all_values for cross-field comparison
-            if step.type == "compare_field" and all_values:
-                rule = Rule(
-                    type="compare_field",
-                    compare_field_label=step.compare_field_label,
-                    compare_operator=step.compare_operator,
-                )
-                result = _validate_rule(rule, ctx.value, all_values)
-                ctx.step_traces.append(StepTrace(
-                    step_id=step.id, step_type=step.type, category="validate",
-                    resolved=result.passed, detail=result.message,
-                ))
-                if not result.passed:
-                    ctx.validation_passed = False
-            else:
-                _execute_validate_step(step, ctx)
-
         status = "ok" if ctx.value else "empty"
-        if not ctx.validation_passed:
-            status = "rule_failed"
 
         return {
             "value": ctx.value,
@@ -758,34 +742,14 @@ def execute_field_chain(pdf_path: str, field: Field, all_values: dict[str, str] 
             "step_traces": ctx.step_traces,
         }
 
-    # Dynamic fields: run search → value → validate chain
+    # Dynamic fields: run search → value chain
     ordered_chain = search_steps + value_steps
     execute_chain(ordered_chain, ctx)
 
-    # Run validation steps with all_values context
-    for step in validate_steps:
-        if step.type == "compare_field" and all_values:
-            rule = Rule(
-                type="compare_field",
-                compare_field_label=step.compare_field_label,
-                compare_operator=step.compare_operator,
-            )
-            result = _validate_rule(rule, ctx.value, all_values)
-            ctx.step_traces.append(StepTrace(
-                step_id=step.id, step_type=step.type, category="validate",
-                resolved=result.passed, detail=result.message,
-            ))
-            if not result.passed:
-                ctx.validation_passed = False
-        else:
-            _execute_validate_step(step, ctx)
-
-    # Determine final status
+    # Determine final status (no validation here — handled by rule_engine)
     status = ctx.anchor_status
     if not ctx.value:
         status = "empty" if not ctx.anchor_found else status
-    if not ctx.validation_passed and status in ("ok", "anchor_shifted", "anchor_relocated"):
-        status = "rule_failed"
 
     return {
         "value": ctx.value,

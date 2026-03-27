@@ -20,3 +20,5 @@ infra/.venv/
 research/
 .playwright-mcp/
 node_modules/
+
+backend/storage/test_runs

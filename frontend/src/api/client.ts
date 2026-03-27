@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Template, Field, ExtractionResponse, Region, LayoutBlock } from "../types";
+import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, ComputedField } from "../types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
@@ -39,8 +39,11 @@ export async function createTemplate(
   name: string,
   fields: Field[],
   mode: "single" | "comparison" = "single",
+  rules: TemplateRule[] = [],
+  computed_fields: ComputedField[] = [],
+  rule_graph?: { nodes: unknown[]; edges: unknown[] },
 ): Promise<Template> {
-  const response = await api.post("/templates", { name, fields, mode });
+  const response = await api.post("/templates", { name, fields, mode, rules, computed_fields, rule_graph });
   return response.data;
 }
 
@@ -59,11 +62,17 @@ export async function updateTemplate(
   name: string,
   fields: Field[],
   mode: "single" | "comparison" = "single",
+  rules: TemplateRule[] = [],
+  computed_fields: ComputedField[] = [],
+  rule_graph?: { nodes: unknown[]; edges: unknown[] },
 ): Promise<Template> {
   const response = await api.put(`/templates/${templateId}`, {
     name,
     fields,
     mode,
+    rules,
+    computed_fields,
+    rule_graph,
   });
   return response.data;
 }
@@ -101,9 +110,51 @@ export async function testExtraction(
   pdfId: string,
   fields: Field[],
   pdfIdB?: string,
+  rules: TemplateRule[] = [],
+  computed_fields: ComputedField[] = [],
 ): Promise<ExtractionResponse> {
-  const body: Record<string, unknown> = { pdf_id: pdfId, fields };
+  const body: Record<string, unknown> = { pdf_id: pdfId, fields, rules, computed_fields };
   if (pdfIdB) body.pdf_id_b = pdfIdB;
   const response = await api.post("/test", body);
+  return response.data;
+}
+
+// --- Test Runs ---
+
+export async function saveTestRun(data: {
+  pdf_id: string;
+  pdf_filename: string;
+  template_name?: string;
+  template_id?: string;
+  entries: { label: string; value: string; status: string }[];
+}): Promise<TestRun> {
+  const response = await api.post("/test-runs", data);
+  return response.data;
+}
+
+export async function listTestRuns(): Promise<TestRun[]> {
+  const response = await api.get("/test-runs");
+  return response.data;
+}
+
+export async function getTestRun(runId: string): Promise<TestRun> {
+  const response = await api.get(`/test-runs/${runId}`);
+  return response.data;
+}
+
+export async function deleteTestRun(runId: string): Promise<void> {
+  await api.delete(`/test-runs/${runId}`);
+}
+
+// --- Cross-template field references ---
+
+export interface TemplateFieldInfo {
+  template_id: string;
+  template_name: string;
+  fields: { label: string; datatype?: string; computed?: boolean; field_type?: string; table_columns?: { id: string; label: string }[] }[];
+}
+
+export async function listAllTemplateFields(): Promise<TemplateFieldInfo[]> {
+  const response = await api.get("/templates/all-fields");
   return response.data;
 }

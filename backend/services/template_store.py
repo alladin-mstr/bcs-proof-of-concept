@@ -15,6 +15,9 @@ def save_template(template_id: str, data: TemplateCreate) -> Template:
         fields=data.fields,
         created_at=datetime.now(timezone.utc),
         mode=data.mode,
+        rules=data.rules,
+        computed_fields=data.computed_fields,
+        rule_graph=data.rule_graph,
     )
     get_storage().save_template(template_id, template.model_dump_json(indent=2))
     return template
@@ -50,6 +53,9 @@ def update_template(template_id: str, data: TemplateCreate) -> Template | None:
         fields=data.fields,
         created_at=existing.get("created_at", datetime.now(timezone.utc).isoformat()),
         mode=data.mode,
+        rules=data.rules,
+        computed_fields=data.computed_fields,
+        rule_graph=data.rule_graph,
     )
     storage.save_template(template_id, template.model_dump_json(indent=2))
     return template

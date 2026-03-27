@@ -40,15 +40,15 @@ export default function PdfViewer() {
       {/* PDF + overlay */}
       <div
         ref={containerRef}
-        className="relative inline-block shadow-lg rounded-lg overflow-hidden border border-gray-200"
+        className="relative inline-block shadow-lg rounded-lg overflow-hidden border border-border"
         style={{ userSelect: 'none' }}
       >
-        <Document file={fileUrl} loading={<div className="p-8 text-gray-400">Loading PDF...</div>}>
+        <Document file={fileUrl} loading={<div className="p-8 text-muted-foreground">Loading PDF...</div>}>
           <Page
             pageNumber={currentPage}
             scale={zoom}
             onRenderSuccess={onRenderSuccess}
-            loading={<div className="p-8 text-gray-400">Loading page...</div>}
+            loading={<div className="p-8 text-muted-foreground">Loading page...</div>}
             renderTextLayer={false}
             renderAnnotationLayer={false}
           />
@@ -58,7 +58,7 @@ export default function PdfViewer() {
         )}
       </div>
 
-      <p className="text-xs text-gray-400 mt-3">
+      <p className="text-xs text-muted-foreground mt-3">
         Click and drag on the page to draw a field region
       </p>
     </div>

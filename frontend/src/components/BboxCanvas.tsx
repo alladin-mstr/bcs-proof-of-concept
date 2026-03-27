@@ -3,7 +3,7 @@ import { useAppStore } from '../store/appStore';
 import { useBboxDrawing } from '../hooks/useBboxDrawing';
 import { normalizedToPixel, pixelToNormalized } from '../utils/coords';
 import { detectFormat } from '../api/client';
-import type { Field, FieldResult, Region } from '../types';
+import type { Field, FieldResult, Region, TableColumn } from '../types';
 
 interface DragState {
   fieldId: string;
@@ -29,6 +29,9 @@ const COLORS = {
   staticValueB: { fill: 'rgba(16,185,129,0.25)', stroke: 'rgb(16,185,129)' },
   dynamicAnchorB: { fill: 'rgba(245,158,11,0.25)', stroke: 'rgb(217,119,6)' },
   dynamicValueB: { fill: 'rgba(16,185,129,0.25)', stroke: 'rgb(16,185,129)' },
+  // Table field colors (violet)
+  tableField: { fill: 'rgba(139,92,246,0.12)', stroke: 'rgb(139,92,246)' },
+  tableDivider: { stroke: 'rgba(139,92,246,0.6)' },
 };
 
 function getResultColor(status: FieldResult['status']) {
@@ -76,6 +79,9 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
   const updateFieldRegion = useAppStore((s) => s.updateFieldRegion);
   const anchorWizard = useAppStore((s) => s.anchorWizard);
   const completeAnchorWizardStep = useAppStore((s) => s.completeAnchorWizardStep);
+  const tableWizard = useAppStore((s) => s.tableWizard);
+  const completeTableBounds = useAppStore((s) => s.completeTableBounds);
+  const addTableDivider = useAppStore((s) => s.addTableDivider);
 
   // Drag state for moving existing boxes
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -117,7 +123,9 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
 
   const currentPageFields = fields.filter(
     (f) => {
-      const onPage = f.value_region.page === currentPage || (f.anchor_region && f.anchor_region.page === currentPage);
+      const onPage = f.type === 'table'
+        ? f.table_config?.table_region.page === currentPage
+        : f.value_region.page === currentPage || (f.anchor_region && f.anchor_region.page === currentPage);
       if (!onPage) return false;
       // When source prop is provided (comparison mode), only show fields for this source
       if (source !== undefined) return (f.source ?? "a") === source;
@@ -139,6 +147,12 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
     async (rect: { x: number; y: number; width: number; height: number }) => {
       if (!canEdit) return;
       const region = pixelRectToRegion(rect, currentPage, pageWidth, pageHeight);
+
+      // If table wizard is in bounds phase, capture the drawn rectangle
+      if (tableWizard && tableWizard.phase === 'bounds') {
+        completeTableBounds(region);
+        return;
+      }
 
       // If anchor wizard is active, auto-extract text from the drawn region
       if (anchorWizard) {
@@ -218,7 +232,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
         setPendingAnchor(null);
       }
     },
-    [canEdit, addField, currentPage, pageWidth, pageHeight, drawMode, pendingAnchor, setPendingAnchor, pdfId, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId, anchorWizard, completeAnchorWizardStep]
+    [canEdit, addField, currentPage, pageWidth, pageHeight, drawMode, pendingAnchor, setPendingAnchor, pdfId, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId, anchorWizard, completeAnchorWizardStep, tableWizard, completeTableBounds]
   );
 
   const { currentRect, handlers } = useBboxDrawing(onDrawComplete);
@@ -298,8 +312,20 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
     if (chainEditFieldId) {
       setChainEditFieldId(null);
     }
+    // Table wizard dividers phase: click to place vertical dividers
+    if (tableWizard && tableWizard.phase === 'dividers' && tableWizard.tableBounds) {
+      const svg = svgRef.current;
+      if (svg) {
+        const rect = svg.getBoundingClientRect();
+        const scaleX = svg.clientWidth / rect.width;
+        const mx = (e.clientX - rect.left) * scaleX;
+        const normX = mx / pageWidth;
+        addTableDivider(normX);
+      }
+      return;
+    }
     if (!drag && canEdit) handlers.onMouseDown(e);
-  }, [drag, handlers, editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId]);
+  }, [drag, handlers, editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId, tableWizard, addTableDivider, pageWidth]);
   const previewColor = drawingRegionForStepId
     ? { fill: 'rgba(245,158,11,0.1)', stroke: 'rgb(245,158,11)' }
     : drawMode === 'dynamic' && !pendingAnchor
@@ -319,7 +345,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
         </marker>
       </defs>
 
-      {currentPageFields.map((field) => {
+      {currentPageFields.filter(f => f.type !== 'table').map((field) => {
         const activeFieldId = editingFieldId ?? chainEditFieldId;
         const isHidden = activeFieldId && field.id !== activeFieldId;
         const isFieldEditing = editingFieldId === field.id;
@@ -384,6 +410,147 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
           </g>
         );
       })()}
+
+      {/* Table wizard banner */}
+      {tableWizard && (() => {
+        const bannerText = tableWizard.phase === 'bounds'
+          ? 'Draw the table area (top-left to bottom-right)'
+          : tableWizard.phase === 'dividers'
+            ? `Click to place column dividers (${tableWizard.columns.length} columns) — press Done when finished`
+            : 'Label your columns';
+        return (
+          <g>
+            <rect x={0} y={0} width={pageWidth} height={28} fill="rgba(139,92,246,0.95)" rx={0} />
+            <text x={pageWidth / 2} y={18} fill="white" fontSize={12} fontWeight={600}
+              fontFamily="system-ui, sans-serif" textAnchor="middle">
+              {bannerText}
+            </text>
+          </g>
+        );
+      })()}
+
+      {/* Table wizard: show bounds + dividers being placed */}
+      {tableWizard && tableWizard.tableBounds && (() => {
+        const tb = tableWizard.tableBounds;
+        const pos = normalizedToPixel(tb.x, tb.y, pageWidth, pageHeight);
+        const dim = normalizedToPixel(tb.width, tb.height, pageWidth, pageHeight);
+        return (
+          <g>
+            {/* Table bounds rectangle */}
+            <rect x={pos.x} y={pos.y} width={dim.x} height={dim.y}
+              fill={COLORS.tableField.fill} stroke={COLORS.tableField.stroke}
+              strokeWidth={2} strokeDasharray="6 3" rx={2} />
+            {/* Column dividers */}
+            {tableWizard.columns.slice(1).map((col) => {
+              const cx = normalizedToPixel(col.x, 0, pageWidth, pageHeight).x;
+              return (
+                <g key={col.id}>
+                  <line x1={cx} y1={pos.y} x2={cx} y2={pos.y + dim.y}
+                    stroke={COLORS.tableDivider.stroke} strokeWidth={2} strokeDasharray="4 3" />
+                  <text x={cx + 3} y={pos.y + 12} fill="rgb(139,92,246)" fontSize={9} fontWeight={600}
+                    fontFamily="system-ui, sans-serif">
+                    {col.label}
+                  </text>
+                </g>
+              );
+            })}
+            {/* First column label */}
+            {tableWizard.columns[0] && (
+              <text x={pos.x + 3} y={pos.y + 12} fill="rgb(139,92,246)" fontSize={9} fontWeight={600}
+                fontFamily="system-ui, sans-serif">
+                {tableWizard.columns[0].label}
+              </text>
+            )}
+          </g>
+        );
+      })()}
+
+      {/* Table fields: render table bounds + dividers for completed table fields */}
+      {currentPageFields.filter(f => f.type === 'table' && f.table_config).map((field) => {
+        const tc = field.table_config!;
+        if (tc.table_region.page !== currentPage) return null;
+        const fieldResult = resultByKey[`${field.source ?? 'a'}:${field.label}`] ?? resultByKey[field.label] ?? null;
+        const resolvedHeight = fieldResult?.resolved_table_height ?? tc.table_region.height;
+        const pos = normalizedToPixel(tc.table_region.x, tc.table_region.y, pageWidth, pageHeight);
+        const dim = normalizedToPixel(tc.table_region.width, resolvedHeight, pageWidth, pageHeight);
+        const resultColor = extractionResults
+          ? getResultColor(fieldResult?.status ?? 'empty')
+          : null;
+        const color = resultColor ?? COLORS.tableField;
+        return (
+          <g key={`table-${field.id}`} className="group">
+            {/* Table bounds */}
+            <rect x={pos.x} y={pos.y} width={dim.x} height={dim.y}
+              fill={color.fill} stroke={color.stroke} strokeWidth={2} rx={2} />
+            {/* Label bar */}
+            <rect x={pos.x} y={pos.y - 20} width={Math.max(dim.x, field.label.length * 8 + 30)} height={20}
+              fill={color.stroke} rx={2} />
+            <text x={pos.x + 4} y={pos.y - 5} fill="white" fontSize={12} fontWeight={600} fontFamily="system-ui, sans-serif">
+              {field.label}
+            </text>
+            <text x={pos.x + field.label.length * 8 + 10} y={pos.y - 5} fill="rgba(255,255,255,0.7)" fontSize={9}
+              fontFamily="system-ui, sans-serif">
+              TABLE
+            </text>
+            {/* Column dividers */}
+            {tc.columns.slice(1).map((col) => {
+              const cx = normalizedToPixel(col.x, 0, pageWidth, pageHeight).x;
+              return (
+                <line key={col.id} x1={cx} y1={pos.y} x2={cx} y2={pos.y + dim.y}
+                  stroke={COLORS.tableDivider.stroke} strokeWidth={1.5} strokeDasharray="4 3" />
+              );
+            })}
+            {/* Column labels along top */}
+            {tc.columns.map((col, i) => {
+              const colX = normalizedToPixel(col.x, 0, pageWidth, pageHeight).x;
+              const nextX = i + 1 < tc.columns.length
+                ? normalizedToPixel(tc.columns[i + 1].x, 0, pageWidth, pageHeight).x
+                : pos.x + dim.x;
+              const colWidth = nextX - colX;
+              return (
+                <text key={col.id} x={colX + colWidth / 2} y={pos.y + dim.y + 14}
+                  fill="rgb(139,92,246)" fontSize={9} fontWeight={600}
+                  fontFamily="system-ui, sans-serif" textAnchor="middle">
+                  {col.label}
+                </text>
+              );
+            })}
+            {/* End anchor indicator */}
+            {tc.end_anchor_mode && tc.end_anchor_mode !== 'none' && (() => {
+              const endY = tc.end_anchor_mode === 'end_of_page'
+                ? pageHeight
+                : pos.y + dim.y; // for "text" mode, show at drawn bottom (actual resolved at runtime)
+              const lineY = tc.end_anchor_mode === 'end_of_page' ? pageHeight : pos.y + dim.y;
+              const endLabel = tc.end_anchor_mode === 'end_of_page'
+                ? '↓ end of page'
+                : tc.end_anchor_text ? `↓ "${tc.end_anchor_text}"` : '↓ end anchor';
+              return (
+                <g>
+                  {tc.end_anchor_mode === 'end_of_page' && (
+                    <rect x={pos.x} y={pos.y + dim.y} width={dim.x} height={pageHeight - (pos.y + dim.y)}
+                      fill="rgba(139,92,246,0.04)" stroke="none" />
+                  )}
+                  <line x1={pos.x} y1={lineY} x2={pos.x + dim.x} y2={lineY}
+                    stroke="rgb(139,92,246)" strokeWidth={1.5} strokeDasharray="6 4" opacity={0.7} />
+                  <text x={pos.x + dim.x / 2} y={lineY + 12} fill="rgb(139,92,246)" fontSize={9} fontWeight={500}
+                    fontFamily="system-ui, sans-serif" textAnchor="middle" opacity={0.8}>
+                    {endLabel}
+                  </text>
+                </g>
+              );
+            })()}
+            {/* Delete icon */}
+            {canEdit && (
+              <g className="opacity-0 group-hover:opacity-100 cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); removeField(field.id); }}>
+                <circle cx={pos.x + dim.x - 8} cy={pos.y - 10} r={8} fill="rgb(239,68,68)" />
+                <text x={pos.x + dim.x - 8} y={pos.y - 6} fill="white" fontSize={12}
+                  fontWeight={700} textAnchor="middle" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none' }}>x</text>
+              </g>
+            )}
+          </g>
+        );
+      })}
 
       {/* Render completed wizard anchors */}
       {anchorWizard && anchorWizard.completedAnchors.map((anchor) => {

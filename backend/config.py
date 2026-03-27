@@ -7,6 +7,7 @@ STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "local")
 AZURE_STORAGE_ACCOUNT = os.getenv("AZURE_STORAGE_ACCOUNT", "")
 AZURE_STORAGE_PDFS_CONTAINER = os.getenv("AZURE_STORAGE_PDFS_CONTAINER", "pdfs")
 AZURE_STORAGE_TEMPLATES_CONTAINER = os.getenv("AZURE_STORAGE_TEMPLATES_CONTAINER", "templates")
+AZURE_STORAGE_TEST_RUNS_CONTAINER = os.getenv("AZURE_STORAGE_TEST_RUNS_CONTAINER", "test-runs")
 CORS_ORIGINS = [
     origin.strip()
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")

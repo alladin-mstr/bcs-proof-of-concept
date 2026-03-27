@@ -7,9 +7,11 @@ import {
   listTemplates,
   deleteTemplate as apiDeleteTemplate,
   testExtraction,
+  listTestRuns,
+  extractRegion,
 } from '../api/client';
-import ChainEditor from './ChainEditor';
 import ComparisonFieldsPanel from './ComparisonFieldsPanel';
+import type { TableRow, Field, DataType, TableEndAnchorMode } from '../types';
 
 export default function TemplatePanel() {
   const fields = useAppStore((s) => s.fields);
@@ -25,6 +27,7 @@ export default function TemplatePanel() {
   const setExtractionResults = useAppStore((s) => s.setExtractionResults);
   const removeField = useAppStore((s) => s.removeField);
   const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
+  const updateFieldDataType = useAppStore((s) => s.updateFieldDataType);
   const editingFieldId = useAppStore((s) => s.editingFieldId);
   const setEditingFieldId = useAppStore((s) => s.setEditingFieldId);
   const templateMode = useAppStore((s) => s.templateMode);
@@ -37,10 +40,42 @@ export default function TemplatePanel() {
   const [renamingFieldId, setRenamingFieldId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [comparisonTab, setComparisonTab] = useState<'fields' | 'connections'>('fields');
+  const tableWizard = useAppStore((s) => s.tableWizard);
+  const startTableWizard = useAppStore((s) => s.startTableWizard);
+  const setTableWizardPhase = useAppStore((s) => s.setTableWizardPhase);
+  const finishTableWizard = useAppStore((s) => s.finishTableWizard);
+  const cancelTableWizard = useAppStore((s) => s.cancelTableWizard);
+  const updateTableColumnLabel = useAppStore((s) => s.updateTableColumnLabel);
+  const removeTableDivider = useAppStore((s) => s.removeTableDivider);
+  const setTableKeyColumn = useAppStore((s) => s.setTableKeyColumn);
+  const addField = useAppStore((s) => s.addField);
+
+  // Table preview: fieldId → extracted table data
+  const [tablePreviews, setTablePreviews] = useState<Record<string, TableRow[]>>({});
+  const [tablePreviewLoading, setTablePreviewLoading] = useState<string | null>(null);
+  const [tableModalFieldId, setTableModalFieldId] = useState<string | null>(null);
+
+  const extractTablePreview = useCallback(async (field: Field) => {
+    if (!pdfId || field.type !== 'table' || !field.table_config) return;
+    setTablePreviewLoading(field.id);
+    try {
+      const response = await testExtraction(pdfId, [field]);
+      const result = response.results[0];
+      if (result?.table_data) {
+        setTablePreviews(prev => ({ ...prev, [field.id]: result.table_data! }));
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setTablePreviewLoading(null);
+    }
+  }, [pdfId]);
 
   const pageFields = fields.filter((f) => {
     const page = (f.source ?? 'a') === 'b' ? currentPageB : currentPage;
-    return f.value_region.page === page || (f.anchor_region && f.anchor_region.page === page);
+    return f.type === 'table'
+      ? f.table_config?.table_region.page === page
+      : f.value_region.page === page || (f.anchor_region && f.anchor_region.page === page);
   });
 
   // Mode logic:
@@ -59,11 +94,26 @@ export default function TemplatePanel() {
     setCanDrawFields(canEditFields);
   }, [canEditFields, setCanDrawFields]);
 
+  const setSavedTestRuns = useAppStore((s) => s.setSavedTestRuns);
+
   useEffect(() => {
     listTemplates()
       .then(setTemplates)
       .catch(() => {});
-  }, [setTemplates]);
+    listTestRuns()
+      .then(setSavedTestRuns)
+      .catch(() => {});
+  }, [setTemplates, setSavedTestRuns]);
+
+  const templateRules = useAppStore((s) => s.templateRules);
+  const computedFields = useAppStore((s) => s.computedFields);
+  const setTemplateRuleResults = useAppStore((s) => s.setTemplateRuleResults);
+  const setComputedValues = useAppStore((s) => s.setComputedValues);
+  const setRightPanelTab = useAppStore((s) => s.setRightPanelTab);
+  const ruleNodes = useAppStore((s) => s.ruleNodes);
+  const ruleEdges = useAppStore((s) => s.ruleEdges);
+
+  const getRuleGraph = () => ({ nodes: ruleNodes, edges: ruleEdges });
 
   const handleSaveNew = async () => {
     if (fields.length === 0) return;
@@ -71,9 +121,11 @@ export default function TemplatePanel() {
     if (!name || !name.trim()) return;
     setSaving(true);
     try {
-      await createTemplate(name.trim(), fields, templateMode);
+      const created = await createTemplate(name.trim(), fields, templateMode, templateRules, computedFields, getRuleGraph());
       const updated = await listTemplates();
       setTemplates(updated);
+      loadTemplate(created);
+      setIsEditing(false);
     } catch {
       alert('Failed to save template.');
     } finally {
@@ -88,12 +140,26 @@ export default function TemplatePanel() {
     if (!name || !name.trim()) return;
     setSaving(true);
     try {
-      await apiUpdateTemplate(activeTemplateId, name.trim(), fields, templateMode);
+      await apiUpdateTemplate(activeTemplateId, name.trim(), fields, templateMode, templateRules, computedFields, getRuleGraph());
       const updated = await listTemplates();
       setTemplates(updated);
       setIsEditing(false);
     } catch {
       alert('Failed to update template.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveRules = async () => {
+    if (!activeTemplateId || !activeTemplate) return;
+    setSaving(true);
+    try {
+      await apiUpdateTemplate(activeTemplateId, activeTemplate.name, fields, templateMode, templateRules, computedFields, getRuleGraph());
+      const updated = await listTemplates();
+      setTemplates(updated);
+    } catch {
+      alert('Failed to save rules.');
     } finally {
       setSaving(false);
     }
@@ -122,8 +188,15 @@ export default function TemplatePanel() {
     setIsTesting(true);
     setExtractionResults(null);
     try {
-      const response = await testExtraction(pdfId, fields, templateMode === 'comparison' ? (pdfIdB ?? undefined) : undefined);
+      const response = await testExtraction(
+        pdfId, fields,
+        templateMode === 'comparison' ? (pdfIdB ?? undefined) : undefined,
+        templateRules, computedFields,
+      );
       setExtractionResults(response.results);
+      setTemplateRuleResults(response.template_rule_results ?? []);
+      setComputedValues(response.computed_values ?? {});
+      setRightPanelTab("results");
     } catch {
       alert('Test failed.');
     } finally {
@@ -137,6 +210,12 @@ export default function TemplatePanel() {
       fields: [],
       extractionResults: null,
       pendingAnchor: null,
+      ruleNodes: [],
+      ruleEdges: [],
+      templateRules: [],
+      computedFields: [],
+      templateRuleResults: [],
+      computedValues: {},
     });
     setIsEditing(false);
   };
@@ -157,21 +236,22 @@ export default function TemplatePanel() {
   };
 
   return (
-    <div className="w-72 bg-white border-r border-gray-200 flex flex-col h-full">
+    <>
+    <div className="w-72 border-r border-border flex flex-col max-h-[85vh] bg-background">
       {/* Mode indicator */}
       <div className={`px-4 py-3 border-b flex-shrink-0 ${
         isTestingMode
-          ? 'bg-violet-50 border-violet-200'
+          ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800'
           : isEditMode
-            ? 'bg-emerald-50 border-emerald-200'
-            : 'bg-blue-50 border-blue-200'
+            ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+            : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800'
       }`}>
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${
             isTestingMode ? 'bg-violet-500' : isEditMode ? 'bg-emerald-500' : 'bg-blue-500'
           }`} />
           <span className={`text-xs font-semibold uppercase tracking-wide ${
-            isTestingMode ? 'text-violet-700' : isEditMode ? 'text-emerald-700' : 'text-blue-700'
+            isTestingMode ? 'text-violet-700 dark:text-violet-300' : isEditMode ? 'text-emerald-700 dark:text-emerald-300' : 'text-blue-700 dark:text-blue-300'
           }`}>
             {isTestingMode ? 'Testing Mode' : isEditMode ? 'Editing Template' : 'Create Template'}
           </span>
@@ -179,7 +259,7 @@ export default function TemplatePanel() {
         {(isTestingMode || isEditMode) && activeTemplate && (
           <div className="mt-1.5 flex items-center justify-between">
             <span className={`text-xs font-medium truncate ${
-              isTestingMode ? 'text-violet-600' : 'text-emerald-600'
+              isTestingMode ? 'text-violet-600 dark:text-violet-400' : 'text-emerald-600 dark:text-emerald-400'
             }`}>
               {activeTemplate.name}
             </span>
@@ -195,7 +275,7 @@ export default function TemplatePanel() {
               {isEditMode && (
                 <button
                   onClick={handleCancelEdit}
-                  className="text-[10px] text-gray-500 hover:text-gray-700 font-medium"
+                  className="text-[10px] text-muted-foreground hover:text-foreground font-medium"
                 >
                   Cancel
                 </button>
@@ -212,12 +292,12 @@ export default function TemplatePanel() {
           </div>
         )}
         {isCreateMode && (
-          <p className="text-[11px] text-blue-600 mt-1">
+          <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-1">
             Draw fields on the PDF, add rules, then save
           </p>
         )}
         {isEditMode && (
-          <p className="text-[11px] text-emerald-600 mt-1">
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
             Modify fields and rules, then save changes
           </p>
         )}
@@ -225,17 +305,17 @@ export default function TemplatePanel() {
 
       {/* Template mode toggle (Single / Comparison) — only in create/edit mode */}
       {canEditFields && (
-        <div className="p-3 border-b border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        <div className="p-3 border-b border-border">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
             Template Mode
           </p>
-          <div className="flex rounded-lg overflow-hidden border border-gray-200">
+          <div className="flex rounded-lg overflow-hidden border border-border">
             <button
               onClick={() => setTemplateMode('single')}
               className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
                 templateMode === 'single'
-                  ? 'bg-gray-700 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
+                  ? 'bg-foreground text-background'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
               Single
@@ -245,7 +325,7 @@ export default function TemplatePanel() {
               className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
                 templateMode === 'comparison'
                   ? 'bg-violet-600 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
               Comparison
@@ -255,21 +335,21 @@ export default function TemplatePanel() {
       )}
 
       {/* Fields header + comparison tab switcher */}
-      <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+      <div className="px-4 py-3 border-b border-border flex-shrink-0">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
             Fields
           </h2>
-          <span className="text-[10px] text-gray-400">{pageFields.length} / {fields.length} field{fields.length !== 1 ? 's' : ''}</span>
+          <span className="text-[10px] text-muted-foreground">{pageFields.length} / {fields.length} field{fields.length !== 1 ? 's' : ''}</span>
         </div>
         {templateMode === 'comparison' && (
-          <div className="flex mt-2 rounded-lg overflow-hidden border border-gray-200">
+          <div className="flex mt-2 rounded-lg overflow-hidden border border-border">
             <button
               onClick={() => setComparisonTab('fields')}
               className={`flex-1 py-1 text-[10px] font-medium transition-colors ${
                 comparisonTab === 'fields'
-                  ? 'bg-gray-700 text-white'
-                  : 'bg-white text-gray-500 hover:bg-gray-50'
+                  ? 'bg-foreground text-background'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
               Fields
@@ -279,7 +359,7 @@ export default function TemplatePanel() {
               className={`flex-1 py-1 text-[10px] font-medium transition-colors ${
                 comparisonTab === 'connections'
                   ? 'bg-violet-600 text-white'
-                  : 'bg-white text-gray-500 hover:bg-gray-50'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
               Connections
@@ -288,13 +368,170 @@ export default function TemplatePanel() {
         )}
       </div>
 
+      {/* Table wizard controls */}
+      {tableWizard && (
+        <div className="px-3 py-2 border-b border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30">
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="w-2 h-2 rounded-full bg-violet-500" />
+            <span className="text-xs font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wide">
+              Table Wizard — {tableWizard.phase === 'bounds' ? 'Draw Bounds' : tableWizard.phase === 'dividers' ? 'Place Dividers' : 'Label Columns'}
+            </span>
+          </div>
+          {tableWizard.phase === 'bounds' && (
+            <p className="text-[10px] text-violet-600 dark:text-violet-400">Draw the table area on the PDF.</p>
+          )}
+          {tableWizard.phase === 'dividers' && (
+            <>
+              <p className="text-[10px] text-violet-600 dark:text-violet-400 mb-1.5">
+                Click on the PDF to place column dividers. {tableWizard.columns.length} column{tableWizard.columns.length !== 1 ? 's' : ''} defined.
+              </p>
+              {tableWizard.columns.length > 1 && (
+                <div className="space-y-1 mb-1.5">
+                  {tableWizard.columns.slice(1).map((col) => (
+                    <div key={col.id} className="flex items-center gap-1 text-[10px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                      <span className="text-violet-600 dark:text-violet-400">{col.label}</span>
+                      <button onClick={() => removeTableDivider(col.id)}
+                        className="ml-auto text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-1.5">
+                <button onClick={async () => {
+                  // Auto-extract header text for each column from the first row
+                  if (pdfId && tableWizard.tableBounds) {
+                    const bounds = tableWizard.tableBounds;
+                    const sorted = [...tableWizard.columns].sort((a, b) => a.x - b.x);
+                    const tableRight = bounds.x + bounds.width;
+                    // Header row: thin strip at top of table (just ~1 line height)
+                    const headerHeight = Math.min(bounds.height * 0.08, 0.018);
+                    for (let i = 0; i < sorted.length; i++) {
+                      const colLeft = sorted[i].x;
+                      const colRight = i + 1 < sorted.length ? sorted[i + 1].x : tableRight;
+                      try {
+                        const text = await extractRegion(pdfId, {
+                          page: bounds.page,
+                          x: colLeft,
+                          y: bounds.y,
+                          width: colRight - colLeft,
+                          height: headerHeight,
+                        });
+                        if (text?.trim()) {
+                          updateTableColumnLabel(sorted[i].id, text.trim());
+                        }
+                      } catch { /* keep default label */ }
+                    }
+                  }
+                  setTableWizardPhase('labels');
+                }}
+                  disabled={tableWizard.columns.length < 2}
+                  className="flex-1 py-1 text-[10px] font-medium bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                  Done — Label Columns
+                </button>
+                <button onClick={cancelTableWizard}
+                  className="px-2 py-1 text-[10px] font-medium text-muted-foreground bg-muted rounded hover:bg-muted/80">
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+          {tableWizard.phase === 'labels' && (
+            <>
+              <div className="space-y-1.5 mb-2">
+                {tableWizard.columns.map((col) => (
+                  <div key={col.id} className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />
+                    <input
+                      value={col.label}
+                      onChange={(e) => updateTableColumnLabel(col.id, e.target.value)}
+                      className="flex-1 text-[11px] px-1.5 py-0.5 bg-background border border-violet-300 dark:border-violet-700 rounded outline-none focus:ring-1 focus:ring-violet-400"
+                      placeholder="Column label"
+                    />
+                  </div>
+                ))}
+              </div>
+              {/* Key column picker */}
+              <div className="mb-2">
+                <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 mb-1">
+                  Key Column <span className="font-normal text-muted-foreground">(always has data — used to merge multiline rows)</span>
+                </p>
+                <select
+                  value={tableWizard.keyColumnId ?? ''}
+                  onChange={(e) => setTableKeyColumn(e.target.value || null)}
+                  className="w-full text-[11px] px-1.5 py-1 bg-background border border-violet-300 dark:border-violet-700 rounded outline-none focus:ring-1 focus:ring-violet-400"
+                >
+                  <option value="">None (no merging)</option>
+                  {tableWizard.columns.map((col) => (
+                    <option key={col.id} value={col.id}>{col.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-1.5">
+                <button onClick={async () => {
+                  const label = window.prompt('Enter a label for this table field:');
+                  if (!label?.trim()) return;
+                  const newField: Field = {
+                    id: tableWizard.fieldId,
+                    label: label.trim(),
+                    type: 'table',
+                    anchor_mode: 'static',
+                    anchors: [],
+                    value_region: tableWizard.tableBounds!,
+                    rules: [],
+                    chain: [],
+                    table_config: {
+                      table_region: tableWizard.tableBounds!,
+                      columns: tableWizard.columns,
+                      header_row: true,
+                      key_column_id: tableWizard.keyColumnId ?? undefined,
+                    },
+                  };
+                  addField(newField);
+                  useAppStore.setState({ tableWizard: null });
+                  setExpandedFieldId(newField.id);
+                  // Auto-extract preview
+                  extractTablePreview(newField);
+                }}
+                  className="flex-1 py-1 text-[10px] font-medium bg-violet-600 text-white rounded hover:bg-violet-700">
+                  Finish
+                </button>
+                <button onClick={() => setTableWizardPhase('dividers')}
+                  className="px-2 py-1 text-[10px] font-medium text-muted-foreground bg-muted rounded hover:bg-muted/80">
+                  Back
+                </button>
+                <button onClick={cancelTableWizard}
+                  className="px-2 py-1 text-[10px] font-medium text-red-500 bg-muted rounded hover:bg-red-50">
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Add Table button */}
+      {canEditFields && !tableWizard && (
+        <div className="px-3 py-2 border-b border-border">
+          <button
+            onClick={() => {
+              const fieldId = crypto.randomUUID();
+              startTableWizard(fieldId);
+            }}
+            className="w-full py-1.5 text-[10px] font-medium text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors"
+          >
+            + Add Table Field
+          </button>
+        </div>
+      )}
+
       {/* Fields list — connections tab in comparison mode, or normal field list */}
       {templateMode === 'comparison' && comparisonTab === 'connections' ? (
         <ComparisonFieldsPanel />
       ) : (
       <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
         {pageFields.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-4">
+          <p className="text-xs text-muted-foreground text-center py-4">
             {isTestingMode
               ? 'No fields on this page.'
               : fields.length === 0
@@ -307,10 +544,10 @@ export default function TemplatePanel() {
               key={field.id}
               className={`group/field rounded-lg text-xs transition-colors cursor-pointer ${
                 editingFieldId === field.id
-                  ? 'bg-indigo-50 border border-indigo-300 ring-1 ring-indigo-200'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-300 dark:border-indigo-700 ring-1 ring-indigo-200 dark:ring-indigo-800'
                   : field.value_region.page === currentPage
-                    ? 'bg-blue-50 border border-blue-200'
-                    : 'bg-gray-50 border border-gray-100'
+                    ? 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800'
+                    : 'bg-muted border border-border'
               }`}
               onClick={() => setExpandedFieldId(expandedFieldId === field.id ? null : field.id)}
             >
@@ -318,6 +555,7 @@ export default function TemplatePanel() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className={`inline-flex items-center justify-center px-1 h-4 rounded text-[10px] font-bold ${
+                      field.type === 'table' ? 'bg-violet-100 text-violet-700' :
                       { static: 'bg-blue-100 text-blue-700',
                         single: 'bg-amber-100 text-amber-700',
                         bracket: 'bg-orange-100 text-orange-700',
@@ -326,7 +564,7 @@ export default function TemplatePanel() {
                         area_bracket: 'bg-green-100 text-green-700',
                       }[field.anchor_mode ?? (field.type === 'dynamic' ? 'single' : 'static')]
                     }`}>
-                      {{ static: 'S', single: '1', bracket: 'B', area_value: 'AV', area_locator: 'AL', area_bracket: 'AB' }[field.anchor_mode ?? (field.type === 'dynamic' ? 'single' : 'static')]}
+                      {field.type === 'table' ? 'T' : { static: 'S', single: '1', bracket: 'B', area_value: 'AV', area_locator: 'AL', area_bracket: 'AB' }[field.anchor_mode ?? (field.type === 'dynamic' ? 'single' : 'static')]}
                     </span>
                     {renamingFieldId === field.id ? (
                       <input
@@ -350,31 +588,26 @@ export default function TemplatePanel() {
                           e.stopPropagation();
                         }}
                         onClick={(e) => e.stopPropagation()}
-                        className="font-medium text-gray-800 bg-white border border-indigo-300 rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400 w-full text-xs"
+                        className="font-medium text-foreground bg-background border border-indigo-300 dark:border-indigo-700 rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400 dark:focus:ring-indigo-600 w-full text-xs"
                       />
                     ) : (
-                      <span className="font-medium text-gray-800 truncate">
+                      <span className="font-medium text-foreground truncate">
                         {i + 1}. {field.label}
                       </span>
                     )}
-                    {renamingFieldId !== field.id && (field.chain?.length > 0) && (
-                      <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1 rounded" title="Chain steps">
-                        ⛓ {field.chain.length}
-                      </span>
-                    )}
-                    {renamingFieldId !== field.id && field.rules.length > 0 && !field.chain?.length && (
-                      <span className="text-[10px] bg-purple-100 text-purple-700 px-1 rounded">
-                        {field.rules.length}
-                      </span>
-                    )}
-                    {renamingFieldId !== field.id && field.value_format && field.value_format !== 'string' && (
-                      <span className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded">
-                        {field.value_format}
+                    {renamingFieldId !== field.id && (field.detected_datatype || field.value_format) && (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-1 rounded">
+                        {field.detected_datatype || field.value_format}
                       </span>
                     )}
                   </div>
-                  <div className="mt-0.5 text-gray-400">
-                    Page {field.value_region.page}
+                  <div className="mt-0.5 text-muted-foreground">
+                    Page {field.type === 'table' ? field.table_config?.table_region.page : field.value_region.page}
+                    {field.type === 'table' && field.table_config && (
+                      <span className="ml-1 text-violet-500">
+                        | {field.table_config.columns.length} cols
+                      </span>
+                    )}
                     {field.anchors?.length > 0 && (
                       <span className="ml-1 text-amber-500">
                         | {field.anchors.map(a => `"${a.expected_text}"`).join(' × ')}
@@ -396,7 +629,7 @@ export default function TemplatePanel() {
                         setRenameDraft(field.label);
                         setRenamingFieldId(field.id);
                       }}
-                      className="text-gray-300 hover:text-indigo-500 transition-colors opacity-0 group-hover/field:opacity-100"
+                      className="text-muted-foreground/50 hover:text-indigo-500 transition-colors opacity-0 group-hover/field:opacity-100"
                       title="Edit field"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -405,7 +638,7 @@ export default function TemplatePanel() {
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); removeField(field.id); }}
-                      className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover/field:opacity-100"
+                      className="text-muted-foreground/50 hover:text-red-500 transition-colors opacity-0 group-hover/field:opacity-100"
                       title="Remove"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -416,25 +649,150 @@ export default function TemplatePanel() {
                 )}
               </div>
               {canEditFields && expandedFieldId === field.id && (
-                <div className="px-3 pb-2 border-t border-gray-100 pt-1.5">
+                <div className="px-3 pb-2 border-t border-border pt-1.5" onClick={(e) => e.stopPropagation()}>
+                  {/* Table config + preview */}
+                  {field.type === 'table' && field.table_config && (
+                    <div className="mb-1.5">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400">Columns</p>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); extractTablePreview(field); }}
+                          disabled={tablePreviewLoading === field.id}
+                          className="text-[9px] font-medium text-violet-500 hover:text-violet-700 disabled:opacity-40"
+                        >
+                          {tablePreviewLoading === field.id ? 'Extracting...' : tablePreviews[field.id] ? '↻ Refresh' : '▶ Extract Preview'}
+                        </button>
+                      </div>
+                      {field.table_config.columns.map((col) => (
+                        <div key={col.id} className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                          <span>{col.label}</span>
+                          {field.table_config!.key_column_id === col.id && (
+                            <span className="text-[9px] bg-violet-100 text-violet-600 px-1 rounded">key</span>
+                          )}
+                        </div>
+                      ))}
+                      {/* Table preview */}
+                      {tablePreviews[field.id] && (
+                        <div className="mt-2 overflow-x-auto rounded border border-violet-200 dark:border-violet-800">
+                          <table className="w-full text-[10px]">
+                            <thead>
+                              <tr className="bg-violet-50 dark:bg-violet-950/30">
+                                {field.table_config.columns.map((col) => (
+                                  <th key={col.id} className="px-1.5 py-1 text-left font-semibold text-violet-700 dark:text-violet-300 border-b border-violet-200 dark:border-violet-800 whitespace-nowrap">
+                                    {col.label}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tablePreviews[field.id].map((row, rowIdx) => (
+                                <tr key={rowIdx} className={rowIdx % 2 === 0 ? '' : 'bg-muted/30'}>
+                                  {field.table_config!.columns.map((col) => (
+                                    <td key={col.id} className="px-1.5 py-0.5 text-foreground/70 border-b border-border font-mono whitespace-nowrap">
+                                      {row[col.label] || <span className="text-muted-foreground">-</span>}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <div className="px-1.5 py-0.5 text-[9px] text-muted-foreground bg-muted/50 border-t border-border flex items-center justify-between">
+                            <span>{tablePreviews[field.id].length} row{tablePreviews[field.id].length !== 1 ? 's' : ''} extracted</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setTableModalFieldId(field.id); }}
+                              className="text-violet-500 hover:text-violet-700 font-medium"
+                              title="Expand table"
+                            >
+                              ⤢ Expand
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {tablePreviewLoading === field.id && (
+                        <div className="mt-2 text-[10px] text-violet-500 animate-pulse">Extracting table data...</div>
+                      )}
+                    </div>
+                  )}
+                  {/* End anchor (table fields only) */}
+                  {field.type === 'table' && field.table_config && (
+                    <div className="mb-1.5">
+                      <label className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 block mb-0.5">Table End</label>
+                      <select
+                        value={field.table_config.end_anchor_mode || 'none'}
+                        onChange={(e) => {
+                          const mode = e.target.value as TableEndAnchorMode;
+                          const state = useAppStore.getState();
+                          useAppStore.setState({
+                            fields: state.fields.map(f =>
+                              f.id === field.id && f.table_config
+                                ? { ...f, table_config: { ...f.table_config, end_anchor_mode: mode, end_anchor_text: mode === 'text' ? (f.table_config.end_anchor_text || '') : undefined } }
+                                : f
+                            ),
+                          });
+                        }}
+                        className="w-full text-xs bg-background border border-border rounded px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-violet-400"
+                      >
+                        <option value="none">Fixed (drawn bounds)</option>
+                        <option value="end_of_page">End of page</option>
+                        <option value="text">Text anchor</option>
+                      </select>
+                      {field.table_config.end_anchor_mode === 'text' && (
+                        <input
+                          type="text"
+                          value={field.table_config.end_anchor_text || ''}
+                          placeholder="e.g. Subtotal, Total, etc."
+                          onChange={(e) => {
+                            const state = useAppStore.getState();
+                            useAppStore.setState({
+                              fields: state.fields.map(f =>
+                                f.id === field.id && f.table_config
+                                  ? { ...f, table_config: { ...f.table_config, end_anchor_text: e.target.value } }
+                                  : f
+                              ),
+                            });
+                          }}
+                          className="mt-1 w-full text-xs bg-background border border-border rounded px-2 py-1 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                        />
+                      )}
+                      {field.table_config.end_anchor_mode === 'end_of_page' && (
+                        <p className="text-[9px] text-muted-foreground mt-0.5">Scans from table top to bottom of page</p>
+                      )}
+                    </div>
+                  )}
                   {/* Anchor info */}
                   {(field.anchors?.length > 0) && (
                     <div className="mb-1.5">
                       {field.anchors.map((a) => (
-                        <div key={a.id} className="text-[10px] text-gray-500 flex items-center gap-1">
+                        <div key={a.id} className="text-[10px] text-muted-foreground flex items-center gap-1">
                           <span className={`w-1.5 h-1.5 rounded-full ${
                             a.role === 'area_top' || a.role === 'area_bottom' ? 'bg-green-400' :
                             a.role === 'secondary' ? 'bg-orange-400' : 'bg-amber-400'
                           }`} />
-                          <span className="text-gray-400">{a.role}:</span>
+                          <span className="text-muted-foreground/70">{a.role}:</span>
                           <span className="truncate">&quot;{a.expected_text}&quot;</span>
                         </div>
                       ))}
                     </div>
                   )}
                   {/* Add/change anchor button */}
-                  <AnchorTierSelector fieldId={field.id} currentMode={field.anchor_mode ?? (field.type === 'dynamic' ? 'single' : 'static')} />
-                  <ChainEditor field={field} />
+                  <AnchorTierSelector fieldId={field.id} currentMode={field.anchor_mode ?? (field.type === 'dynamic' ? 'single' : 'static')} tableMode={field.type === 'table'} />
+                  {field.type !== 'table' && (
+                    <div className="mt-1.5">
+                      <label className="text-[10px] font-semibold text-muted-foreground block mb-0.5">Data Type</label>
+                      <select
+                        value={field.detected_datatype || 'string'}
+                        onChange={(e) => updateFieldDataType(field.id, e.target.value as DataType)}
+                        className="w-full text-xs bg-background border border-border rounded px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      >
+                        <option value="string">String</option>
+                        <option value="number">Number</option>
+                        <option value="integer">Integer</option>
+                        <option value="date">Date</option>
+                        <option value="currency">Currency</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -445,7 +803,7 @@ export default function TemplatePanel() {
 
       {/* Bottom actions */}
       {isTestingMode ? (
-        <div className="p-3 border-t border-gray-100">
+        <div className="p-3 border-t border-border space-y-2">
           <button
             onClick={handleTest}
             disabled={!pdfId || fields.length === 0 || isTesting}
@@ -453,14 +811,23 @@ export default function TemplatePanel() {
           >
             {isTesting ? 'Testing...' : 'Run Test'}
           </button>
-          <p className="text-[10px] text-gray-400 text-center mt-1.5">
+          {(ruleNodes.length > 0 || templateRules.length > 0) && (
+            <button
+              onClick={handleSaveRules}
+              disabled={saving}
+              className="w-full py-1.5 text-xs font-medium text-foreground/70 bg-muted rounded-lg hover:bg-muted/80 disabled:opacity-40 transition-colors"
+            >
+              {saving ? 'Saving...' : 'Save Rules'}
+            </button>
+          )}
+          <p className="text-[10px] text-muted-foreground text-center">
             Validates this PDF against template rules
           </p>
         </div>
       ) : (
         <>
           {/* Save / Update button */}
-          <div className="p-3 border-t border-gray-100 space-y-2">
+          <div className="p-3 border-t border-border space-y-2">
             {isEditMode ? (
               <>
                 <button
@@ -473,7 +840,7 @@ export default function TemplatePanel() {
                 <button
                   onClick={handleSaveNew}
                   disabled={fields.length === 0 || saving}
-                  className="w-full py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="w-full py-1.5 text-xs font-medium text-foreground/70 bg-muted rounded-lg hover:bg-muted/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   Save as New Template
                 </button>
@@ -482,68 +849,71 @@ export default function TemplatePanel() {
               <button
                 onClick={handleSaveNew}
                 disabled={fields.length === 0 || saving}
-                className="w-full py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {saving ? 'Saving...' : 'Save as Template'}
               </button>
             )}
           </div>
 
-          {/* Saved templates */}
-          {!isEditMode && (
-            <div className="border-t border-gray-100">
-              <div className="px-4 py-3 pb-2 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
-                  Templates
-                </h2>
-                <span className="text-[10px] text-gray-400">{templates.length}</span>
-              </div>
-              <div className="overflow-y-auto max-h-48 px-3 pb-3 space-y-1.5">
-                {templates.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-2">No templates saved yet.</p>
-                ) : (
-                  templates.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors bg-gray-50 border border-gray-100 hover:bg-violet-50 hover:border-violet-200"
-                      onClick={() => loadTemplate(t)}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium text-gray-800 block truncate">{t.name}</span>
-                        <span className="text-gray-400">{t.fields.length} fields</span>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleEditTemplate(t); }}
-                          className="text-[10px] text-emerald-600 hover:text-emerald-800 font-medium px-1"
-                          title="Edit template"
-                        >
-                          Edit
-                        </button>
-                        <span className="text-gray-300">|</span>
-                        <span className="text-[10px] text-violet-600 font-medium px-1">Test</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(t.id);
-                          }}
-                          className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors"
-                          title="Delete template"
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>
+    {/* Table expand modal */}
+    {tableModalFieldId && (() => {
+      const modalField = fields.find(f => f.id === tableModalFieldId);
+      const modalData = tablePreviews[tableModalFieldId];
+      if (!modalField?.table_config || !modalData) return null;
+      const cols = modalField.table_config.columns;
+      return createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setTableModalFieldId(null)}>
+          <div className="bg-background rounded-lg shadow-xl border border-border max-w-[90vw] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-violet-100 text-violet-700">T</span>
+                <span className="text-sm font-semibold text-foreground">{modalField.label}</span>
+                <span className="text-xs text-muted-foreground">{modalData.length} row{modalData.length !== 1 ? 's' : ''} × {cols.length} col{cols.length !== 1 ? 's' : ''}</span>
+              </div>
+              <button onClick={() => setTableModalFieldId(null)} className="text-muted-foreground hover:text-foreground p-1">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Modal body */}
+            <div className="overflow-auto flex-1 p-1">
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-violet-50 dark:bg-violet-950/30">
+                    <th className="px-3 py-2 text-left font-semibold text-violet-700 dark:text-violet-300 border-b-2 border-violet-200 dark:border-violet-800 whitespace-nowrap text-[10px] text-muted-foreground w-8">#</th>
+                    {cols.map((col) => (
+                      <th key={col.id} className="px-3 py-2 text-left font-semibold text-violet-700 dark:text-violet-300 border-b-2 border-violet-200 dark:border-violet-800 whitespace-nowrap">
+                        {col.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {modalData.map((row, rowIdx) => (
+                    <tr key={rowIdx} className={`${rowIdx % 2 === 0 ? 'bg-background' : 'bg-muted/30'} hover:bg-violet-50/50 dark:hover:bg-violet-950/10`}>
+                      <td className="px-3 py-1.5 text-muted-foreground border-b border-border text-[10px]">{rowIdx + 1}</td>
+                      {cols.map((col) => (
+                        <td key={col.id} className="px-3 py-1.5 text-foreground/80 border-b border-border font-mono whitespace-nowrap">
+                          {row[col.label] || <span className="text-muted-foreground">-</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>,
+        document.body
+      );
+    })()}
+    </>
   );
 }
 
@@ -582,7 +952,7 @@ const ANCHOR_MODES: { mode: AnchorMode; label: string; icon: string; desc: strin
   },
 ];
 
-function AnchorTierSelector({ fieldId, currentMode }: { fieldId: string; currentMode: AnchorMode }) {
+function AnchorTierSelector({ fieldId, currentMode, tableMode }: { fieldId: string; currentMode: AnchorMode; tableMode?: boolean }) {
   const [open, setOpen] = useState(false);
   const [hoveredMode, setHoveredMode] = useState<AnchorMode | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
@@ -604,11 +974,11 @@ function AnchorTierSelector({ fieldId, currentMode }: { fieldId: string; current
   if (anchorWizard?.fieldId === fieldId) {
     const step = anchorWizard.steps[anchorWizard.currentStep];
     return (
-      <div className="mb-1.5 p-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px]">
-        <p className="text-amber-800 font-medium">
+      <div className="mb-1.5 p-1.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-[10px]">
+        <p className="text-amber-800 dark:text-amber-300 font-medium">
           Step {anchorWizard.currentStep + 1}/{anchorWizard.steps.length}
         </p>
-        <p className="text-amber-600">{step.prompt}</p>
+        <p className="text-amber-600 dark:text-amber-400">{step.prompt}</p>
         <button
           onClick={(e) => { e.stopPropagation(); useAppStore.getState().cancelAnchorWizard(); }}
           className="mt-1 text-amber-700 underline hover:text-amber-900"
@@ -625,10 +995,17 @@ function AnchorTierSelector({ fieldId, currentMode }: { fieldId: string; current
     setTooltipPos(null);
     // Always clear previous anchors/chain before switching
     const state = useAppStore.getState();
+    const field = state.fields.find(f => f.id === fieldId);
+    const isTable = field?.type === 'table';
     useAppStore.setState({
       fields: state.fields.map(f =>
         f.id === fieldId
-          ? { ...f, type: mode === 'static' ? 'static' as const : 'dynamic' as const, anchor_mode: mode, anchors: [], anchor_region: undefined, expected_anchor_text: undefined, chain: [] }
+          ? {
+              ...f,
+              // Preserve type: "table" — only toggle static/dynamic for non-table fields
+              type: isTable ? 'table' as const : mode === 'static' ? 'static' as const : 'dynamic' as const,
+              anchor_mode: mode, anchors: [], anchor_region: undefined, expected_anchor_text: undefined, chain: [],
+            }
           : f
       ),
     });
@@ -643,13 +1020,13 @@ function AnchorTierSelector({ fieldId, currentMode }: { fieldId: string; current
     <div className="mb-1.5" onClick={(e) => e.stopPropagation()}>
       <button
         onClick={() => setOpen(!open)}
-        className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+        className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
       >
         + Anchor
       </button>
       {open && (
-        <div ref={dropdownRef} className="mt-1 bg-white rounded-lg border border-gray-200 shadow-lg p-1.5 space-y-0.5">
-          {ANCHOR_MODES.map(({ mode, label, icon, desc }) => {
+        <div ref={dropdownRef} className="mt-1 bg-popover rounded-lg border border-border shadow-lg p-1.5 space-y-0.5">
+          {ANCHOR_MODES.filter(m => !tableMode || m.mode === 'static' || m.mode === 'single').map(({ mode, label, icon, desc }) => {
             const isActive = mode === currentMode;
             return (
               <button
@@ -658,13 +1035,13 @@ function AnchorTierSelector({ fieldId, currentMode }: { fieldId: string; current
                 onMouseEnter={(e) => handleRowHover(mode, e)}
                 onMouseLeave={() => handleRowHover(null)}
                 className={`w-full text-left px-2 py-1.5 rounded transition-colors flex items-start gap-2 ${
-                  isActive ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50'
+                  isActive ? 'bg-blue-50 dark:bg-blue-950/20 ring-1 ring-blue-200 dark:ring-blue-800' : 'hover:bg-muted'
                 }`}
               >
                 <span className="text-[13px] leading-none mt-0.5 w-5 text-center flex-shrink-0">{icon}</span>
                 <div className="min-w-0">
-                  <span className={`text-[11px] font-semibold ${isActive ? 'text-blue-700' : 'text-gray-700'}`}>{label}</span>
-                  <p className="text-[9px] text-gray-400 leading-tight mt-0.5">{desc}</p>
+                  <span className={`text-[11px] font-semibold ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-foreground'}`}>{label}</span>
+                  <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">{desc}</p>
                 </div>
                 {isActive && (
                   <span className="text-[9px] text-blue-500 font-medium ml-auto flex-shrink-0 mt-0.5">current</span>
