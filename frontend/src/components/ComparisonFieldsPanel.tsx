@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import { useAppStore } from '../store/appStore';
-import type { Field, CompareOperator } from '../types';
+import type { Field, CompareOperator, RuleNodeData } from '../types';
+import type { Node, Edge } from '@xyflow/react';
 
 interface Connection {
   id: string;
@@ -26,11 +27,10 @@ function getOpLabel(op: CompareOperator): string {
 
 export default function ComparisonFieldsPanel() {
   const fields = useAppStore((s) => s.fields);
-  const addRule = useAppStore((s) => s.addRule);
-  const removeRule = useAppStore((s) => s.removeRule);
-  const updateRule = useAppStore((s) => s.updateRule);
   const removeField = useAppStore((s) => s.removeField);
   const canEdit = useAppStore((s) => s.canDrawFields);
+  const ruleNodes = useAppStore((s) => s.ruleNodes);
+  const ruleEdges = useAppStore((s) => s.ruleEdges);
 
   const fieldsA = fields.filter((f) => (f.source ?? 'a') === 'a');
   const fieldsB = fields.filter((f) => (f.source ?? 'a') === 'b');
@@ -73,60 +73,43 @@ export default function ComparisonFieldsPanel() {
     measurePositions();
   }, [fields, measurePositions]);
 
-  // Derive connections from rules + chain steps
+  // Derive connections from rule graph (source of truth)
   const connections: Connection[] = [];
-  for (const field of fields) {
-    const fieldSource = field.source ?? 'a';
-    // Check legacy rules
-    field.rules.forEach((rule, ruleIndex) => {
-      if (rule.type === 'compare_field' && rule.compare_field_label && rule.compare_operator) {
-        // Find target on the OPPOSITE source (handles same-named fields across PDFs)
-        const target = fields.find((f) =>
-          f.label === rule.compare_field_label && (f.source ?? 'a') !== fieldSource
-        ) ?? fields.find((f) =>
-          f.label === rule.compare_field_label && f.id !== field.id
-        );
-        if (target && fieldSource !== (target.source ?? 'a')) {
-          const isFieldA = fieldSource === 'a';
-          connections.push({
-            id: `${field.id}-r${ruleIndex}`,
-            fieldA: isFieldA ? field : target,
-            fieldB: isFieldA ? target : field,
-            operator: rule.compare_operator,
-            ownerFieldId: field.id,
-            ruleIndex,
-          });
-        }
-      }
-    });
-    // Check chain steps
-    field.chain.forEach((step) => {
-      if (step.category === 'validate' && step.type === 'compare_field' && step.compare_field_label && step.compare_operator) {
-        const target = fields.find((f) =>
-          f.label === step.compare_field_label && (f.source ?? 'a') !== fieldSource
-        ) ?? fields.find((f) =>
-          f.label === step.compare_field_label && f.id !== field.id
-        );
-        if (target && fieldSource !== (target.source ?? 'a')) {
-          const isFieldA = fieldSource === 'a';
-          // Check if we already have this connection from a rule (avoid duplicates)
-          const alreadyExists = connections.some((c) =>
-            (c.fieldA.id === field.id && c.fieldB.id === target.id) ||
-            (c.fieldA.id === target.id && c.fieldB.id === field.id)
-          );
-          if (!alreadyExists) {
-            connections.push({
-              id: `${field.id}-c${step.id}`,
-              fieldA: isFieldA ? field : target,
-              fieldB: isFieldA ? target : field,
-              operator: step.compare_operator,
-              ownerFieldId: field.id,
-              ruleIndex: -1, // chain step, not a rule
-            });
-          }
-        }
-      }
-    });
+  {
+    const compNodes = ruleNodes.filter((n) => n.type === 'comparison');
+    for (const compNode of compNodes) {
+      const data = compNode.data as RuleNodeData;
+      const operator = (data.comparisonOperator ?? 'equals') as CompareOperator;
+
+      const edgeA = ruleEdges.find((e) => e.target === compNode.id && e.targetHandle === 'a');
+      const edgeB = ruleEdges.find((e) => e.target === compNode.id && e.targetHandle === 'b');
+      if (!edgeA || !edgeB) continue;
+
+      const srcNodeA = ruleNodes.find((n) => n.id === edgeA.source);
+      const srcNodeB = ruleNodes.find((n) => n.id === edgeB.source);
+      if (!srcNodeA || !srcNodeB) continue;
+      if (srcNodeA.type !== 'field_input' || srcNodeB.type !== 'field_input') continue;
+
+      const dataA = srcNodeA.data as RuleNodeData;
+      const dataB = srcNodeB.data as RuleNodeData;
+      const fieldA = fields.find((f) => `field-${f.id}` === srcNodeA.id || f.label === dataA.label);
+      const fieldB = fields.find((f) => `field-${f.id}` === srcNodeB.id || f.label === dataB.label);
+      if (!fieldA || !fieldB) continue;
+
+      const srcA = fieldA.source ?? 'a';
+      const srcB = fieldB.source ?? 'a';
+      if (srcA === srcB) continue;
+
+      const isFieldA = srcA === 'a';
+      connections.push({
+        id: `rg-${compNode.id}`,
+        fieldA: isFieldA ? fieldA : fieldB,
+        fieldB: isFieldA ? fieldB : fieldA,
+        operator,
+        ownerFieldId: (isFieldA ? fieldA : fieldB).id,
+        ruleIndex: -2, // rule graph node
+      });
+    }
   }
 
   // Mouse handlers for drag-to-connect
@@ -157,29 +140,73 @@ export default function ComparisonFieldsPanel() {
 
   const confirmConnect = (operator: CompareOperator) => {
     if (!pendingConnect) return;
+    const fromField = fields.find((f) => f.id === pendingConnect.fromId);
     const toField = fields.find((f) => f.id === pendingConnect.toId);
-    if (!toField) return;
-    addRule(pendingConnect.fromId, {
-      type: 'compare_field',
-      compare_field_label: toField.label,
-      compare_operator: operator,
-    });
+    if (!fromField || !toField) return;
+
+    // Create comparison node + edges in the rule graph (source of truth)
+    const state = useAppStore.getState();
+    const fromNodeId = `field-${pendingConnect.fromId}`;
+    const toNodeId = `field-${pendingConnect.toId}`;
+    const isFromA = (fromField.source ?? 'a') === 'a';
+    const compNodeId = crypto.randomUUID();
+
+    const compNode: Node = {
+      id: compNodeId,
+      type: 'comparison',
+      position: { x: 450 + Math.random() * 100, y: 50 + Math.random() * 200 },
+      data: {
+        label: `${fromField.label} ${operator} ${toField.label}`,
+        nodeType: 'comparison',
+        comparisonOperator: operator,
+      } as RuleNodeData,
+    };
+
+    const newEdges: Edge[] = [
+      {
+        id: `e-${compNodeId}-a`,
+        source: isFromA ? fromNodeId : toNodeId,
+        target: compNodeId,
+        targetHandle: 'a',
+        animated: true,
+        style: { strokeWidth: 2 },
+      },
+      {
+        id: `e-${compNodeId}-b`,
+        source: isFromA ? toNodeId : fromNodeId,
+        target: compNodeId,
+        targetHandle: 'b',
+        animated: true,
+        style: { strokeWidth: 2 },
+      },
+    ];
+
+    state.setRuleNodes([...state.ruleNodes, compNode]);
+    state.setRuleEdges([...state.ruleEdges, ...newEdges]);
+
     setPendingConnect(null);
     setTimeout(measurePositions, 50);
   };
 
-  const isRuleConnection = (conn: Connection) => conn.ruleIndex >= 0;
-
   const handleDeleteConnection = (conn: Connection) => {
-    if (!isRuleConnection(conn)) return; // chain steps managed via chain editor
-    removeRule(conn.ownerFieldId, conn.ruleIndex);
+    // Remove comparison node from rule graph (source of truth)
+    const compNodeId = conn.id.replace(/^rg-/, '');
+    const state = useAppStore.getState();
+    state.setRuleNodes(state.ruleNodes.filter((n) => n.id !== compNodeId));
+    state.setRuleEdges(state.ruleEdges.filter((e) => e.target !== compNodeId && e.source !== compNodeId));
     setEditingConn(null);
     setTimeout(measurePositions, 50);
   };
 
   const handleChangeOperator = (conn: Connection, newOp: CompareOperator) => {
-    if (!isRuleConnection(conn)) return; // chain steps managed via chain editor
-    updateRule(conn.ownerFieldId, conn.ruleIndex, { compare_operator: newOp });
+    // Update comparison node operator in rule graph
+    const compNodeId = conn.id.replace(/^rg-/, '');
+    const state = useAppStore.getState();
+    state.setRuleNodes(state.ruleNodes.map((n) =>
+      n.id === compNodeId
+        ? { ...n, data: { ...n.data, comparisonOperator: newOp } }
+        : n
+    ));
   };
 
   // Build SVG line data

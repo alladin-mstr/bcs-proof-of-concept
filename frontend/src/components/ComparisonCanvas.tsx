@@ -9,7 +9,8 @@ import { Document, Page, pdfjs } from "react-pdf";
 import { useAppStore } from "../store/appStore";
 import { getPdfUrl, listPdfs, type PdfInfo } from "../api/client";
 import BboxCanvas from "./BboxCanvas";
-import type { Field, CompareOperator } from "../types";
+import type { Field, CompareOperator, RuleNodeData } from "../types";
+import type { Node, Edge } from "@xyflow/react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -464,75 +465,47 @@ const OP_LABELS: Record<string, string> = {
   greater_or_equal: "at least",
 };
 
-function deriveConnections(fields: Field[]): ConnectionLine[] {
+function deriveConnections(fields: Field[], ruleNodes: Node[], ruleEdges: Edge[]): ConnectionLine[] {
   const connections: ConnectionLine[] = [];
-  for (const field of fields) {
-    const fieldSource = field.source ?? "a";
-    field.rules.forEach((rule, ruleIndex) => {
-      if (
-        rule.type === "compare_field" &&
-        rule.compare_field_label &&
-        rule.compare_operator
-      ) {
-        const target =
-          fields.find(
-            (f) =>
-              f.label === rule.compare_field_label &&
-              (f.source ?? "a") !== fieldSource,
-          ) ??
-          fields.find(
-            (f) => f.label === rule.compare_field_label && f.id !== field.id,
-          );
-        if (target && fieldSource !== (target.source ?? "a")) {
-          const isFieldA = fieldSource === "a";
-          connections.push({
-            id: `${field.id}-r${ruleIndex}`,
-            fieldAId: isFieldA ? field.id : target.id,
-            fieldBId: isFieldA ? target.id : field.id,
-            operator: rule.compare_operator,
-            labelA: isFieldA ? field.label : target.label,
-            labelB: isFieldA ? target.label : field.label,
-          });
-        }
-      }
-    });
-    field.chain.forEach((step) => {
-      if (
-        step.category === "validate" &&
-        step.type === "compare_field" &&
-        step.compare_field_label &&
-        step.compare_operator
-      ) {
-        const target =
-          fields.find(
-            (f) =>
-              f.label === step.compare_field_label &&
-              (f.source ?? "a") !== fieldSource,
-          ) ??
-          fields.find(
-            (f) => f.label === step.compare_field_label && f.id !== field.id,
-          );
-        if (target && fieldSource !== (target.source ?? "a")) {
-          const isFieldA = fieldSource === "a";
-          const alreadyExists = connections.some(
-            (c) =>
-              (c.fieldAId === field.id && c.fieldBId === target.id) ||
-              (c.fieldAId === target.id && c.fieldBId === field.id),
-          );
-          if (!alreadyExists) {
-            connections.push({
-              id: `${field.id}-c${step.id}`,
-              fieldAId: isFieldA ? field.id : target.id,
-              fieldBId: isFieldA ? target.id : field.id,
-              operator: step.compare_operator,
-              labelA: isFieldA ? field.label : target.label,
-              labelB: isFieldA ? target.label : field.label,
-            });
-          }
-        }
-      }
+
+  const compNodes = ruleNodes.filter((n) => n.type === "comparison");
+  for (const compNode of compNodes) {
+    const data = compNode.data as RuleNodeData;
+    const operator = (data.comparisonOperator ?? "equals") as CompareOperator;
+
+    // Find the two field_input sources connected to handles 'a' and 'b'
+    const edgeA = ruleEdges.find((e) => e.target === compNode.id && e.targetHandle === "a");
+    const edgeB = ruleEdges.find((e) => e.target === compNode.id && e.targetHandle === "b");
+    if (!edgeA || !edgeB) continue;
+
+    const srcNodeA = ruleNodes.find((n) => n.id === edgeA.source);
+    const srcNodeB = ruleNodes.find((n) => n.id === edgeB.source);
+    if (!srcNodeA || !srcNodeB) continue;
+    if (srcNodeA.type !== "field_input" || srcNodeB.type !== "field_input") continue;
+
+    // Resolve field_input nodes to actual fields
+    const dataA = srcNodeA.data as RuleNodeData;
+    const dataB = srcNodeB.data as RuleNodeData;
+    const fieldA = fields.find((f) => `field-${f.id}` === srcNodeA.id || f.label === dataA.label);
+    const fieldB = fields.find((f) => `field-${f.id}` === srcNodeB.id || f.label === dataB.label);
+    if (!fieldA || !fieldB) continue;
+
+    // Only show if they're from different sources
+    const srcA = fieldA.source ?? "a";
+    const srcB = fieldB.source ?? "a";
+    if (srcA === srcB) continue;
+
+    const isFieldA = srcA === "a";
+    connections.push({
+      id: `rg-${compNode.id}`,
+      fieldAId: isFieldA ? fieldA.id : fieldB.id,
+      fieldBId: isFieldA ? fieldB.id : fieldA.id,
+      operator,
+      labelA: isFieldA ? fieldA.label : fieldB.label,
+      labelB: isFieldA ? fieldB.label : fieldA.label,
     });
   }
+
   return connections;
 }
 
@@ -544,13 +517,25 @@ function ConnectionOverlay({
   containerRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const fields = useAppStore((s) => s.fields);
+  const ruleNodes = useAppStore((s) => s.ruleNodes);
+  const ruleEdges = useAppStore((s) => s.ruleEdges);
   const connectDragFrom = useAppStore((s) => s.connectDragFrom);
   const connectDragMouse = useAppStore((s) => s.connectDragMouse);
   const [positions, setPositions] = useState<
     Record<string, { x: number; y: number }>
   >({});
+  const [selectedConnId, setSelectedConnId] = useState<string | null>(null);
 
-  const connections = deriveConnections(fields);
+  const connections = deriveConnections(fields, ruleNodes, ruleEdges);
+
+  const handleDeleteConnection = useCallback((conn: ConnectionLine) => {
+    // Connection id is `rg-<compNodeId>`, extract the node id
+    const compNodeId = conn.id.replace(/^rg-/, "");
+    const state = useAppStore.getState();
+    state.setRuleNodes(state.ruleNodes.filter((n) => n.id !== compNodeId));
+    state.setRuleEdges(state.ruleEdges.filter((e) => e.target !== compNodeId && e.source !== compNodeId));
+    setSelectedConnId(null);
+  }, []);
 
   const measurePositions = useCallback(() => {
     if (!containerRef.current) return;
@@ -659,119 +644,179 @@ function ConnectionOverlay({
   if (svgLines.length === 0 && !dragLine) return null;
 
   return (
-    <svg
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      style={{ zIndex: 20, overflow: "visible" }}
-    >
-      <defs>
-        <filter id="conn-shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow
-            dx="0"
-            dy="1"
-            stdDeviation="2"
-            floodColor="rgba(139,92,246,0.3)"
-          />
-        </filter>
-      </defs>
-      {/* Drag preview line */}
-      {dragLine && (
-        <g>
-          <line
-            x1={dragLine.x1}
-            y1={dragLine.y1}
-            x2={dragLine.x2}
-            y2={dragLine.y2}
-            stroke="rgb(139,92,246)"
-            strokeWidth={2}
-            strokeDasharray="6 4"
-            opacity={0.7}
-          />
-          <circle
-            cx={dragLine.x1}
-            cy={dragLine.y1}
-            r={5}
-            fill="rgb(139,92,246)"
-            stroke="white"
-            strokeWidth={2}
-          />
-          <circle
-            cx={dragLine.x2}
-            cy={dragLine.y2}
-            r={4}
-            fill="rgb(139,92,246)"
-            opacity={0.5}
-          />
-        </g>
+    <>
+      {/* Click-away to deselect */}
+      {selectedConnId && (
+        <div
+          className="absolute inset-0"
+          style={{ zIndex: 19 }}
+          onClick={() => setSelectedConnId(null)}
+        />
       )}
-      {svgLines.map(({ conn, x1, y1, x2, y2 }) => {
-        const midX = (x1 + x2) / 2;
-        const midY = (y1 + y2) / 2;
-        const dx = Math.abs(x2 - x1);
-        const cpX = dx * 0.35;
-        const path = `M ${x1} ${y1} C ${x1 + cpX} ${y1}, ${x2 - cpX} ${y2}, ${x2} ${y2}`;
-        const opLabel = OP_LABELS[conn.operator] ?? conn.operator;
-        const badgeWidth = opLabel.length * 6.5 + 16;
-
-        return (
-          <g key={conn.id}>
-            {/* Glow line */}
-            <path
-              d={path}
-              fill="none"
-              stroke="rgba(139,92,246,0.15)"
-              strokeWidth={6}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        style={{ zIndex: 20, overflow: "visible", pointerEvents: "none" }}
+      >
+        <defs>
+          <filter id="conn-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow
+              dx="0"
+              dy="1"
+              stdDeviation="2"
+              floodColor="rgba(139,92,246,0.3)"
             />
-            {/* Visible line */}
-            <path
-              d={path}
-              fill="none"
+          </filter>
+        </defs>
+        {/* Drag preview line */}
+        {dragLine && (
+          <g>
+            <line
+              x1={dragLine.x1}
+              y1={dragLine.y1}
+              x2={dragLine.x2}
+              y2={dragLine.y2}
               stroke="rgb(139,92,246)"
-              strokeWidth={1.5}
+              strokeWidth={2}
               strokeDasharray="6 4"
+              opacity={0.7}
             />
-            {/* Endpoint dots */}
             <circle
-              cx={x1}
-              cy={y1}
-              r={4}
+              cx={dragLine.x1}
+              cy={dragLine.y1}
+              r={5}
               fill="rgb(139,92,246)"
               stroke="white"
               strokeWidth={2}
             />
             <circle
-              cx={x2}
-              cy={y2}
+              cx={dragLine.x2}
+              cy={dragLine.y2}
               r={4}
               fill="rgb(139,92,246)"
-              stroke="white"
-              strokeWidth={2}
+              opacity={0.5}
             />
-            {/* Operator badge at midpoint */}
-            <g filter="url(#conn-shadow)">
-              <rect
-                x={midX - badgeWidth / 2}
-                y={midY - 9}
-                width={badgeWidth}
-                height={18}
-                rx={9}
-                fill="rgb(139,92,246)"
-              />
-              <text
-                x={midX}
-                y={midY + 3.5}
-                textAnchor="middle"
-                fill="white"
-                fontSize={9}
-                fontWeight={600}
-                fontFamily="system-ui, sans-serif"
-              >
-                {opLabel}
-              </text>
-            </g>
           </g>
-        );
-      })}
-    </svg>
+        )}
+        {svgLines.map(({ conn, x1, y1, x2, y2 }) => {
+          const midX = (x1 + x2) / 2;
+          const midY = (y1 + y2) / 2;
+          const dx = Math.abs(x2 - x1);
+          const cpX = dx * 0.35;
+          const path = `M ${x1} ${y1} C ${x1 + cpX} ${y1}, ${x2 - cpX} ${y2}, ${x2} ${y2}`;
+          const opLabel = OP_LABELS[conn.operator] ?? conn.operator;
+          const badgeWidth = opLabel.length * 6.5 + 16;
+          const isSelected = selectedConnId === conn.id;
+
+          return (
+            <g key={conn.id}>
+              {/* Invisible wide hit area for clicking */}
+              <path
+                d={path}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={16}
+                style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedConnId(isSelected ? null : conn.id);
+                }}
+              />
+              {/* Glow line */}
+              <path
+                d={path}
+                fill="none"
+                stroke={isSelected ? "rgba(239,68,68,0.2)" : "rgba(139,92,246,0.15)"}
+                strokeWidth={6}
+              />
+              {/* Visible line */}
+              <path
+                d={path}
+                fill="none"
+                stroke={isSelected ? "rgb(239,68,68)" : "rgb(139,92,246)"}
+                strokeWidth={1.5}
+                strokeDasharray="6 4"
+              />
+              {/* Endpoint dots */}
+              <circle
+                cx={x1}
+                cy={y1}
+                r={4}
+                fill={isSelected ? "rgb(239,68,68)" : "rgb(139,92,246)"}
+                stroke="white"
+                strokeWidth={2}
+              />
+              <circle
+                cx={x2}
+                cy={y2}
+                r={4}
+                fill={isSelected ? "rgb(239,68,68)" : "rgb(139,92,246)"}
+                stroke="white"
+                strokeWidth={2}
+              />
+              {/* Operator badge at midpoint */}
+              <g filter="url(#conn-shadow)">
+                <rect
+                  x={midX - badgeWidth / 2}
+                  y={midY - 9}
+                  width={badgeWidth}
+                  height={18}
+                  rx={9}
+                  fill={isSelected ? "rgb(239,68,68)" : "rgb(139,92,246)"}
+                  style={{ pointerEvents: "fill", cursor: "pointer" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedConnId(isSelected ? null : conn.id);
+                  }}
+                />
+                <text
+                  x={midX}
+                  y={midY + 3.5}
+                  textAnchor="middle"
+                  fill="white"
+                  fontSize={9}
+                  fontWeight={600}
+                  fontFamily="system-ui, sans-serif"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {opLabel}
+                </text>
+              </g>
+              {/* Delete button when selected */}
+              {isSelected && (
+                <g
+                  style={{ pointerEvents: "fill", cursor: "pointer" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteConnection(conn);
+                  }}
+                >
+                  <circle
+                    cx={midX + badgeWidth / 2 + 12}
+                    cy={midY}
+                    r={10}
+                    fill="rgb(239,68,68)"
+                    stroke="white"
+                    strokeWidth={2}
+                  />
+                  <text
+                    x={midX + badgeWidth / 2 + 12}
+                    y={midY + 4}
+                    textAnchor="middle"
+                    fill="white"
+                    fontSize={12}
+                    fontWeight={700}
+                    fontFamily="system-ui, sans-serif"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    ×
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </>
   );
 }
 
@@ -795,11 +840,12 @@ export default function ComparisonCanvas() {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const fields = useAppStore((s) => s.fields);
-  const addRule = useAppStore((s) => s.addRule);
   const pendingConnection = useAppStore((s) => s.pendingConnection);
   const setPendingConnection = useAppStore((s) => s.setPendingConnection);
   const connectDragFrom = useAppStore((s) => s.connectDragFrom);
-  const hasConnections = deriveConnections(fields).length > 0;
+  const ruleNodes = useAppStore((s) => s.ruleNodes);
+  const ruleEdges = useAppStore((s) => s.ruleEdges);
+  const hasConnections = deriveConnections(fields, ruleNodes, ruleEdges).length > 0;
 
   const handleToggleLinkages = () => {
     if (!showLinkages) {
@@ -881,13 +927,50 @@ export default function ComparisonCanvas() {
 
   const confirmConnect = (operator: CompareOperator) => {
     if (!pendingConnection) return;
+    const fromField = fields.find((f) => f.id === pendingConnection.fromId);
     const toField = fields.find((f) => f.id === pendingConnection.toId);
-    if (!toField) return;
-    addRule(pendingConnection.fromId, {
-      type: "compare_field",
-      compare_field_label: toField.label,
-      compare_operator: operator,
-    });
+    if (!fromField || !toField) return;
+
+    // Create comparison node + edges in the rule graph (source of truth)
+    const state = useAppStore.getState();
+    const fromNodeId = `field-${pendingConnection.fromId}`;
+    const toNodeId = `field-${pendingConnection.toId}`;
+    const isFromA = (fromField.source ?? "a") === "a";
+    const compNodeId = crypto.randomUUID();
+
+    const compNode: Node = {
+      id: compNodeId,
+      type: "comparison",
+      position: { x: 450 + Math.random() * 100, y: 50 + Math.random() * 200 },
+      data: {
+        label: `${fromField.label} ${operator} ${toField.label}`,
+        nodeType: "comparison",
+        comparisonOperator: operator,
+      } as RuleNodeData,
+    };
+
+    const newEdges: Edge[] = [
+      {
+        id: `e-${compNodeId}-a`,
+        source: isFromA ? fromNodeId : toNodeId,
+        target: compNodeId,
+        targetHandle: "a",
+        animated: true,
+        style: { strokeWidth: 2 },
+      },
+      {
+        id: `e-${compNodeId}-b`,
+        source: isFromA ? toNodeId : fromNodeId,
+        target: compNodeId,
+        targetHandle: "b",
+        animated: true,
+        style: { strokeWidth: 2 },
+      },
+    ];
+
+    state.setRuleNodes([...state.ruleNodes, compNode]);
+    state.setRuleEdges([...state.ruleEdges, ...newEdges]);
+
     setPendingConnection(null);
   };
 

@@ -173,8 +173,9 @@ export default function RulesPanel() {
     setComputedFields(computedFields);
   }, [ruleNodes, ruleEdges, activeTemplateId, setTemplateRules, setComputedFields]);
 
-  // Auto-save rule graph to the current template (debounced)
   const templateMode = useAppStore((s) => s.templateMode);
+
+  // Auto-save rule graph to the current template (debounced)
   const storeTemplateRules = useAppStore((s) => s.templateRules);
   const storeComputedFields = useAppStore((s) => s.computedFields);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
