@@ -235,6 +235,10 @@ class AzureBlobStorageBackend(StorageBackend):
         self._test_runs = self._client.get_container_client(test_runs_container)
         self._controles = self._client.get_container_client(controles_container)
         self._controle_runs = self._client.get_container_client(controle_runs_container)
+        # Ensure all containers exist
+        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs]:
+            if not container.exists():
+                container.create_container()
 
     # -- PDFs --
 
@@ -390,7 +394,7 @@ _instance: StorageBackend | None = None
 def get_storage() -> StorageBackend:
     global _instance
     if _instance is None:
-        from config import STORAGE_BACKEND, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_PDFS_CONTAINER, AZURE_STORAGE_TEMPLATES_CONTAINER, AZURE_STORAGE_TEST_RUNS_CONTAINER
+        from config import STORAGE_BACKEND, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_PDFS_CONTAINER, AZURE_STORAGE_TEMPLATES_CONTAINER, AZURE_STORAGE_TEST_RUNS_CONTAINER, AZURE_STORAGE_CONTROLES_CONTAINER, AZURE_STORAGE_CONTROLE_RUNS_CONTAINER
 
         if STORAGE_BACKEND == "azure":
             _instance = AzureBlobStorageBackend(
@@ -398,6 +402,8 @@ def get_storage() -> StorageBackend:
                 pdfs_container=AZURE_STORAGE_PDFS_CONTAINER,
                 templates_container=AZURE_STORAGE_TEMPLATES_CONTAINER,
                 test_runs_container=AZURE_STORAGE_TEST_RUNS_CONTAINER,
+                controles_container=AZURE_STORAGE_CONTROLES_CONTAINER,
+                controle_runs_container=AZURE_STORAGE_CONTROLE_RUNS_CONTAINER,
             )
         else:
             _instance = LocalStorageBackend()
