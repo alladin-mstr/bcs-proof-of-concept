@@ -345,12 +345,27 @@ export default function RulesPanel() {
     setShowAddMenu(false);
   };
 
+  // Helper: look up cross-template table data from savedTestRuns
+  const getCrossTablePreview = (templateId: string, fieldLabel: string): string[][] | undefined => {
+    const run = savedTestRuns.find((r) => r.template_id === templateId);
+    if (!run) return undefined;
+    const entry = run.entries.find((e) => e.label === fieldLabel);
+    if (!entry?.table_data || entry.table_data.length === 0) return undefined;
+    const cols = Object.keys(entry.table_data[0]);
+    const rows = entry.table_data.slice(0, 5).map((row) => cols.map((c) => row[c] || ''));
+    return [cols, ...rows];
+  };
+
   const handleAddExternalField = (
     templateId: string, templateName: string, fieldLabel: string,
     resolution: 'latest_run' | 'specific_run' = 'latest_run', testRunId?: string,
     fieldType?: string,
   ) => {
     const id = crypto.randomUUID();
+    // Pre-populate table preview and value from saved test runs
+    const tablePreview = fieldType === 'table' ? getCrossTablePreview(templateId, fieldLabel) : undefined;
+    const run = savedTestRuns.find((r) => r.template_id === templateId);
+    const lastValue = run?.entries.find((e) => e.label === fieldLabel)?.value;
     const newNode: Node = {
       id,
       type: 'field_input',
@@ -366,6 +381,8 @@ export default function RulesPanel() {
           test_run_id: testRunId,
         },
         fieldType: fieldType as RuleNodeData['fieldType'],
+        ...(tablePreview ? { tablePreview } : {}),
+        ...(lastValue !== undefined ? { lastValue } : {}),
       } as RuleNodeData,
     };
     setRuleNodes([...ruleNodes, newNode]);
@@ -377,6 +394,18 @@ export default function RulesPanel() {
     templateId?: string, templateName?: string,
   ) => {
     const id = crypto.randomUUID();
+    // Pre-populate column preview from saved test runs
+    let lastValue: string | undefined;
+    if (templateId) {
+      const tbl = getCrossTablePreview(templateId, fieldLabel);
+      if (tbl && tbl.length > 1) {
+        const colIdx = tbl[0].indexOf(columnLabel);
+        if (colIdx >= 0) {
+          const vals = tbl.slice(1).map((row) => row[colIdx]).filter(Boolean);
+          lastValue = `[${vals.join(', ')}${tbl.length > 6 ? ', ...' : ''}]`;
+        }
+      }
+    }
     const newNode: Node = {
       id,
       type: 'table_column',
@@ -390,6 +419,7 @@ export default function RulesPanel() {
         },
         tableColumnLabel: columnLabel,
         tableColumnId: columnId,
+        ...(lastValue !== undefined ? { lastValue } : {}),
       } as RuleNodeData,
     };
     setRuleNodes([...ruleNodes, newNode]);
