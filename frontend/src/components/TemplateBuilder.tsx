@@ -8,7 +8,7 @@ import ExtractionResults from '@/components/ExtractionResults';
 import RulesPanel from '@/components/rules/RulesPanel';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 
-function TemplateBuilder() {
+function TemplateBuilder({ embedded = false }: { embedded?: boolean } = {}) {
   const pdfId = useAppStore((s) => s.pdfId);
   const pdfFilename = useAppStore((s) => s.pdfFilename);
   const setPdf = useAppStore((s) => s.setPdf);
@@ -55,6 +55,7 @@ function TemplateBuilder() {
   };
 
   useEffect(() => {
+    if (embedded) { setLoaded(true); return; }
     listPdfs().then((pdfs) => {
       setPdfList(pdfs);
       if (pdfs.length > 0 && !pdfId) {
@@ -65,10 +66,11 @@ function TemplateBuilder() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (embedded) return;
     if (showFiles) {
       listPdfs().then(setPdfList).catch(() => {});
     }
-  }, [showFiles]);
+  }, [showFiles, embedded]);
 
   const handleDeleteTemplate = async (templateId: string) => {
     if (!window.confirm('Delete this template?')) return;
@@ -98,9 +100,9 @@ function TemplateBuilder() {
   const noPdfs = loaded && pdfList.length === 0 && !pdfId;
 
   return (
-    <div className="flex flex-col h-full max-h-[90vh] -mx-6 -mt-2">
+    <div className={`flex flex-col h-full ${embedded ? "" : "max-h-[90vh] -mx-6 -mt-2"}`}>
       {/* Compact toolbar */}
-      <header className="border-b border-border flex-shrink-0">
+      {!embedded && <header className="border-b border-border flex-shrink-0">
         <div className="flex items-center justify-between px-3 py-4">
           {/* Left: filename */}
           <div className="flex items-center gap-2 min-w-0">
@@ -351,11 +353,11 @@ function TemplateBuilder() {
             )}
           </div>
         </div>
-      </header>
+      </header>}
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden h-full max-h-[90vh]">
-        {pdfId && <TemplatePanel />}
+      <div className={`flex flex-1 overflow-hidden h-full ${embedded ? "" : "max-h-[90vh]"}`}>
+        {pdfId && <TemplatePanel embedded={embedded} />}
 
         {/* PDF collapsed strip */}
         {pdfCollapsed && (
@@ -384,15 +386,17 @@ function TemplateBuilder() {
               <ResizablePanel defaultSize={60} minSize={20}>
                 <main className={`h-full ${templateMode === 'comparison' ? 'overflow-hidden' : 'overflow-y-auto'} min-w-0 bg-muted relative`}>
                   {/* Collapse button */}
-                  <button
-                    onClick={handlePdfCollapse}
-                    className="absolute right-2 top-1 z-10 p-1.5 bg-background/80 backdrop-blur-sm border border-border rounded-md text-muted-foreground hover:text-foreground transition-colors shadow-sm"
-                    title="Collapse PDF viewer"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
+                  {!embedded && (
+                    <button
+                      onClick={handlePdfCollapse}
+                      className="absolute right-2 top-1 z-10 p-1.5 bg-background/80 backdrop-blur-sm border border-border rounded-md text-muted-foreground hover:text-foreground transition-colors shadow-sm"
+                      title="Collapse PDF viewer"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                  )}
                   {pdfId && templateMode === 'comparison' ? (
                     <ComparisonCanvas />
                   ) : pdfId ? (
@@ -418,23 +422,40 @@ function TemplateBuilder() {
                   )}
                 </main>
               </ResizablePanel>
-              {pdfId && !rightPanelCollapsed && <ResizableHandle withHandle />}
+              {pdfId && !rightPanelCollapsed && !(embedded && !showResults) && <ResizableHandle withHandle />}
             </>
           )}
 
-          {pdfId && !rightPanelCollapsed && (
+          {pdfId && !rightPanelCollapsed && !(embedded && !showResults) && (
             <ResizablePanel defaultSize={pdfCollapsed ? 100 : 40} minSize={15}>
-              <RightPanel
-                showResults={showResults}
-                onCloseResults={() => setExtractionResults(null)}
-                onCollapse={handleRightPanelCollapse}
-              />
+              {embedded ? (
+                <div className="h-full border-l border-border bg-background flex flex-col overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0">
+                    <span className="text-xs font-medium text-foreground">Resultaten</span>
+                    <button
+                      onClick={() => setExtractionResults(null)}
+                      className="text-muted-foreground hover:text-foreground text-xs"
+                    >
+                      Sluiten
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <ExtractionResults onClose={() => setExtractionResults(null)} embedded />
+                  </div>
+                </div>
+              ) : (
+                <RightPanel
+                  showResults={showResults}
+                  onCloseResults={() => setExtractionResults(null)}
+                  onCollapse={handleRightPanelCollapse}
+                />
+              )}
             </ResizablePanel>
           )}
         </ResizablePanelGroup>
 
         {/* Right panel collapsed strip */}
-        {pdfId && rightPanelCollapsed && (
+        {!embedded && pdfId && rightPanelCollapsed && (
           <div className="flex flex-col border-l border-border bg-background w-10 flex-shrink-0">
             <button
               onClick={handleRightPanelExpand}

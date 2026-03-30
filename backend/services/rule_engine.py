@@ -8,8 +8,9 @@ import re
 from functools import reduce
 from models.schemas import (
     TemplateRule, TemplateRuleResult, RuleOperand, ComputedField,
-    Rule, FieldRef,
+    Rule, FieldRef, ControleRunResult,
 )
+from services.storage_backend import get_storage
 
 
 def _parse_numeric(value: str) -> float | None:
@@ -629,7 +630,7 @@ def resolve_cross_template_values(
     field_refs: list[FieldRef],
     current_template_id: str,
 ) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, list[dict[str, str]]]]]:
-    """Resolve cross-template field values from test runs.
+    """Resolve cross-template field values from test runs and controle runs.
 
     Returns (scalar_values, table_values) where:
       scalar_values = {template_id: {field_label: value}}
@@ -651,6 +652,23 @@ def resolve_cross_template_values(
             cross_tables[template_id] = tables
         seen_templates.add(template_id)
 
+    def _try_controle_runs(template_id: str) -> bool:
+        """Try to resolve from controle runs. Returns True if found."""
+        import json
+        storage = get_storage()
+        for rid in storage.list_controle_run_ids():
+            content = storage.get_controle_run(rid)
+            if content is None:
+                continue
+            run_data = json.loads(content)
+            if run_data.get("controleId") == template_id and run_data.get("entries"):
+                _extract_run(
+                    ControleRunResult(**run_data),
+                    template_id,
+                )
+                return True
+        return False
+
     for ref in field_refs:
         if not ref.template_id or ref.template_id == current_template_id:
             continue
@@ -663,6 +681,9 @@ def resolve_cross_template_values(
             run = get_test_run(ref.test_run_id)
             if run:
                 _extract_run(run, ref.template_id)
+            else:
+                # Test run not found — try controle runs
+                _try_controle_runs(ref.template_id)
 
         elif resolution == "latest_run":
             runs = list_test_runs()
@@ -676,7 +697,9 @@ def resolve_cross_template_values(
                 if run:
                     _extract_run(run, ref.template_id)
 
-        # "live" resolution would require re-extracting — not implemented in initial version
+            # Also check controle runs if not resolved from test runs
+            if ref.template_id not in seen_templates:
+                _try_controle_runs(ref.template_id)
 
     return cross_values, cross_tables
 

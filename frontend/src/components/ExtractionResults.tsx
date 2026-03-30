@@ -106,11 +106,90 @@ function Section({ title, icon, count, defaultOpen = true, variant = 'default', 
   );
 }
 
+// --- Field result cards ---
+
+function FieldResultCards({ results, templateMode }: { results: FieldResult[]; templateMode: string }) {
+  return (
+    <div className="space-y-2">
+      {results.map((r, i) => (
+        <div
+          key={i}
+          className={`rounded-md border p-2.5 ${
+            r.status === 'ok' ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/30 dark:bg-emerald-950/10' :
+            r.status === 'anchor_shifted' ? 'border-blue-200 dark:border-blue-800/50 bg-blue-50/30 dark:bg-blue-950/10' :
+            r.status === 'anchor_relocated' ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/30 dark:bg-amber-950/10' :
+            'border-red-200 dark:border-red-800/50 bg-red-50/30 dark:bg-red-950/10'
+          }`}
+        >
+          <div className="flex items-center gap-1.5 mb-1">
+            <TypeBadge fieldType={r.field_type} />
+            {templateMode === 'comparison' && (
+              <span className={`inline-flex px-1 py-0.5 text-[9px] font-bold rounded ${
+                (r.source ?? 'a') === 'a' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
+              }`}>{(r.source ?? 'a').toUpperCase()}</span>
+            )}
+            <span className="text-xs font-medium text-foreground flex-1 truncate">{r.label}</span>
+            {r.detected_datatype && (
+              <span className="text-[9px] text-muted-foreground bg-muted px-1 rounded">{r.detected_datatype}</span>
+            )}
+            <StatusBadge status={r.status} />
+          </div>
+          <div className="text-[11px] font-mono text-foreground/70 bg-background/60 rounded px-2 py-1 truncate">
+            {r.value || <span className="text-muted-foreground italic">empty</span>}
+          </div>
+
+          {r.field_type === 'table' && r.table_data && r.table_data.length > 0 && (
+            <div className="mt-1.5 overflow-x-auto">
+              <table className="w-full text-[10px] border border-border rounded">
+                <thead>
+                  <tr className="bg-violet-50 dark:bg-violet-950/20">
+                    {Object.keys(r.table_data[0]).map((col) => (
+                      <th key={col} className="px-2 py-1 text-left font-semibold text-violet-700 dark:text-violet-300 border-b border-border">{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.table_data.map((row, rowIdx) => (
+                    <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-background' : 'bg-muted/50'}>
+                      {Object.values(row).map((cell, cellIdx) => (
+                        <td key={cellIdx} className="px-2 py-1 text-foreground/70 border-b border-border font-mono">{cell || '-'}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {r.field_type === 'dynamic' && r.anchor_shift && (
+            <div className="text-[10px] text-muted-foreground mt-1 italic">{r.anchor_shift}</div>
+          )}
+
+          {r.rule_results.length > 0 && (
+            <div className="mt-1.5 space-y-0.5">
+              {r.rule_results.map((rr, j) => (
+                <div key={j} className="flex items-center gap-1 text-[10px]">
+                  {rr.passed ? <CheckIcon /> : <XIcon />}
+                  <span className={rr.passed ? 'text-muted-foreground' : 'text-red-600'}>{rr.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {r.step_traces && r.step_traces.length > 0 && (
+            <ChainTraces traces={r.step_traces} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // --- Main component ---
 
-interface Props { onClose: () => void; }
+interface Props { onClose: () => void; embedded?: boolean; }
 
-export default function ExtractionResults({ onClose }: Props) {
+export default function ExtractionResults({ onClose, embedded = false }: Props) {
   const results = useAppStore((s) => s.extractionResults);
   const templateMode = useAppStore((s) => s.templateMode);
   const pdfId = useAppStore((s) => s.pdfId);
@@ -183,7 +262,7 @@ export default function ExtractionResults({ onClose }: Props) {
                 <XIcon /> {failed} fields
               </span>
             )}
-            {templateRuleResults.length > 0 && (
+            {!embedded && templateRuleResults.length > 0 && (
               <>
                 <span className="text-border">|</span>
                 <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
@@ -199,15 +278,17 @@ export default function ExtractionResults({ onClose }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleSave}
-            disabled={saving || saved}
-            className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
-              saved ? 'bg-emerald-100 text-emerald-700' : 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50'
-            }`}
-          >
-            {saving ? '...' : saved ? 'Saved' : 'Save Run'}
-          </button>
+          {!embedded && (
+            <button
+              onClick={handleSave}
+              disabled={saving || saved}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${
+                saved ? 'bg-emerald-100 text-emerald-700' : 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50'
+              }`}
+            >
+              {saving ? '...' : saved ? 'Saved' : 'Save Run'}
+            </button>
+          )}
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -219,88 +300,19 @@ export default function ExtractionResults({ onClose }: Props) {
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto pb-4">
 
-        {/* Section: Extracted Fields */}
-        <Section title="Extracted Fields" icon={<FieldIcon />} count={results.length}>
-          <div className="space-y-2">
-            {results.map((r, i) => (
-              <div
-                key={i}
-                className={`rounded-md border p-2.5 ${
-                  r.status === 'ok' ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/30 dark:bg-emerald-950/10' :
-                  r.status === 'anchor_shifted' ? 'border-blue-200 dark:border-blue-800/50 bg-blue-50/30 dark:bg-blue-950/10' :
-                  r.status === 'anchor_relocated' ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/30 dark:bg-amber-950/10' :
-                  'border-red-200 dark:border-red-800/50 bg-red-50/30 dark:bg-red-950/10'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <TypeBadge fieldType={r.field_type} />
-                  {templateMode === 'comparison' && (
-                    <span className={`inline-flex px-1 py-0.5 text-[9px] font-bold rounded ${
-                      (r.source ?? 'a') === 'a' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
-                    }`}>{(r.source ?? 'a').toUpperCase()}</span>
-                  )}
-                  <span className="text-xs font-medium text-foreground flex-1 truncate">{r.label}</span>
-                  {r.detected_datatype && (
-                    <span className="text-[9px] text-muted-foreground bg-muted px-1 rounded">{r.detected_datatype}</span>
-                  )}
-                  <StatusBadge status={r.status} />
-                </div>
-                <div className="text-[11px] font-mono text-foreground/70 bg-background/60 rounded px-2 py-1 truncate">
-                  {r.value || <span className="text-muted-foreground italic">empty</span>}
-                </div>
-
-                {/* Table data */}
-                {r.field_type === 'table' && r.table_data && r.table_data.length > 0 && (
-                  <div className="mt-1.5 overflow-x-auto">
-                    <table className="w-full text-[10px] border border-border rounded">
-                      <thead>
-                        <tr className="bg-violet-50 dark:bg-violet-950/20">
-                          {Object.keys(r.table_data[0]).map((col) => (
-                            <th key={col} className="px-2 py-1 text-left font-semibold text-violet-700 dark:text-violet-300 border-b border-border">{col}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {r.table_data.map((row, rowIdx) => (
-                          <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-background' : 'bg-muted/50'}>
-                            {Object.values(row).map((cell, cellIdx) => (
-                              <td key={cellIdx} className="px-2 py-1 text-foreground/70 border-b border-border font-mono">{cell || '-'}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Anchor info */}
-                {r.field_type === 'dynamic' && r.anchor_shift && (
-                  <div className="text-[10px] text-muted-foreground mt-1 italic">{r.anchor_shift}</div>
-                )}
-
-                {/* Legacy rule results */}
-                {r.rule_results.length > 0 && (
-                  <div className="mt-1.5 space-y-0.5">
-                    {r.rule_results.map((rr, j) => (
-                      <div key={j} className="flex items-center gap-1 text-[10px]">
-                        {rr.passed ? <CheckIcon /> : <XIcon />}
-                        <span className={rr.passed ? 'text-muted-foreground' : 'text-red-600'}>{rr.message}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Chain traces (collapsed) */}
-                {r.step_traces && r.step_traces.length > 0 && (
-                  <ChainTraces traces={r.step_traces} />
-                )}
-              </div>
-            ))}
+        {/* Extracted Fields — no Section wrapper in embedded mode */}
+        {embedded ? (
+          <div className="mx-3 mt-3 space-y-2">
+            <FieldResultCards results={results} templateMode={templateMode} />
           </div>
-        </Section>
+        ) : (
+          <Section title="Extracted Fields" icon={<FieldIcon />} count={results.length}>
+            <FieldResultCards results={results} templateMode={templateMode} />
+          </Section>
+        )}
 
         {/* Section: Template Rules */}
-        {templateRuleResults.length > 0 && (
+        {!embedded && templateRuleResults.length > 0 && (
           <Section
             title="Rules"
             icon={<RulesIcon />}
@@ -332,7 +344,7 @@ export default function ExtractionResults({ onClose }: Props) {
         )}
 
         {/* Section: Computed Values */}
-        {Object.keys(computedValues).length > 0 && (
+        {!embedded && Object.keys(computedValues).length > 0 && (
           <Section title="Computed Values" icon={<ComputedIcon />} count={Object.keys(computedValues).length} variant="success">
             <div className="space-y-1">
               {Object.entries(computedValues).map(([label, val]) => (

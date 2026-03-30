@@ -323,3 +323,55 @@ class TestRun(BaseModel):
     template_id: str | None = None
     entries: list[TestRunEntry]
     created_at: datetime
+
+
+# --- Controle (unified control entity) ---
+
+class ControleFile(BaseModel):
+    """A single file definition within a Controle."""
+    id: str
+    label: str
+    pdfId: str | None = None
+    pdfFilename: str | None = None
+    pageCount: int = 0
+    fields: list[Field] = []
+    extractionResults: list[FieldResult] | None = None
+
+
+class ControleRunResult(BaseModel):
+    """A persisted result of running a controle."""
+    id: str
+    controleId: str
+    controleName: str
+    status: Literal["success", "review", "error"]
+    totalFields: int
+    passedFields: int
+    failedFields: int
+    rulesPassed: int
+    rulesTotal: int
+    fileResults: list[dict] = []  # Per-file summary
+    entries: list[TestRunEntry] = []  # Extracted field values for reuse
+    runAt: datetime
+
+
+class ControleCreate(BaseModel):
+    """Request body to create or update a controle."""
+    name: str
+    status: Literal["draft", "published"] = "draft"
+    files: list[ControleFile] = []
+    rules: list[TemplateRule] = []
+    computedFields: list[ComputedField] = []
+    ruleGraph: dict | None = None
+
+
+class Controle(BaseModel):
+    """A persisted controle with files, fields, and rules."""
+    id: str
+    name: str
+    status: Literal["draft", "published"] = "draft"
+    files: list[ControleFile] = []
+    rules: list[TemplateRule] = []
+    computedFields: list[ComputedField] = []
+    ruleGraph: dict | None = None
+    createdAt: datetime
+    updatedAt: datetime

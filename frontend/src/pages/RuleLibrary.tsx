@@ -55,7 +55,7 @@ export default function RuleLibrary() {
   return (
     <div className="space-y-8">
       <HeaderAction>
-        <Button variant="outline" className="rounded-full gap-2" size="sm" onClick={() => toast({ title: "CSV import", description: "Upload functie wordt binnenkort beschikbaar." })}>
+        <Button variant="outline" className="rounded-full" size="sm" onClick={() => toast({ title: "CSV import", description: "Upload functie wordt binnenkort beschikbaar." })}>
           <Upload className="h-4 w-4" />
           Importeer regels (CSV)
         </Button>

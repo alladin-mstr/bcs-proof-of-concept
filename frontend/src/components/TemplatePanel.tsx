@@ -13,7 +13,7 @@ import {
 import ComparisonFieldsPanel from './ComparisonFieldsPanel';
 import type { TableRow, Field, DataType, TableEndAnchorMode } from '../types';
 
-export default function TemplatePanel() {
+export default function TemplatePanel({ embedded = false }: { embedded?: boolean } = {}) {
   const fields = useAppStore((s) => s.fields);
   const templates = useAppStore((s) => s.templates);
   const setTemplates = useAppStore((s) => s.setTemplates);
@@ -97,13 +97,14 @@ export default function TemplatePanel() {
   const setSavedTestRuns = useAppStore((s) => s.setSavedTestRuns);
 
   useEffect(() => {
+    if (embedded) return;
     listTemplates()
       .then(setTemplates)
       .catch(() => {});
     listTestRuns()
       .then(setSavedTestRuns)
       .catch(() => {});
-  }, [setTemplates, setSavedTestRuns]);
+  }, [setTemplates, setSavedTestRuns, embedded]);
 
   const templateRules = useAppStore((s) => s.templateRules);
   const computedFields = useAppStore((s) => s.computedFields);
@@ -191,11 +192,14 @@ export default function TemplatePanel() {
       const response = await testExtraction(
         pdfId, fields,
         templateMode === 'comparison' ? (pdfIdB ?? undefined) : undefined,
-        templateRules, computedFields,
+        embedded ? [] : templateRules,
+        embedded ? [] : computedFields,
       );
       setExtractionResults(response.results);
-      setTemplateRuleResults(response.template_rule_results ?? []);
-      setComputedValues(response.computed_values ?? {});
+      if (!embedded) {
+        setTemplateRuleResults(response.template_rule_results ?? []);
+        setComputedValues(response.computed_values ?? {});
+      }
       setRightPanelTab("results");
     } catch {
       alert('Test failed.');
@@ -237,9 +241,9 @@ export default function TemplatePanel() {
 
   return (
     <>
-    <div className="w-72 border-r border-border flex flex-col max-h-[85vh] bg-background">
+    <div className={`w-72 border-r border-border flex flex-col bg-background ${embedded ? "h-full" : "max-h-[85vh]"}`}>
       {/* Mode indicator */}
-      <div className={`px-4 py-3 border-b flex-shrink-0 ${
+      {!embedded && <div className={`px-4 py-3 border-b flex-shrink-0 ${
         isTestingMode
           ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800'
           : isEditMode
@@ -301,10 +305,10 @@ export default function TemplatePanel() {
             Modify fields and rules, then save changes
           </p>
         )}
-      </div>
+      </div>}
 
       {/* Template mode toggle (Single / Comparison) — only in create/edit mode */}
-      {canEditFields && (
+      {canEditFields && !embedded && (
         <div className="p-3 border-b border-border">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
             Template Mode
@@ -802,7 +806,17 @@ export default function TemplatePanel() {
       )}
 
       {/* Bottom actions */}
-      {isTestingMode ? (
+      {embedded ? (
+        <div className="p-3 border-t border-border space-y-2">
+          <button
+            onClick={handleTest}
+            disabled={!pdfId || fields.length === 0 || isTesting}
+            className="w-full py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {isTesting ? 'Testen...' : 'Test uitvoeren'}
+          </button>
+        </div>
+      ) : isTestingMode ? (
         <div className="p-3 border-t border-border space-y-2">
           <button
             onClick={handleTest}

@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, ComputedField } from "../types";
+import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, ComputedField, Controle, ControleRunResult } from "../types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
@@ -156,5 +156,49 @@ export interface TemplateFieldInfo {
 
 export async function listAllTemplateFields(): Promise<TemplateFieldInfo[]> {
   const response = await api.get("/templates/all-fields");
+  return response.data;
+}
+
+// --- Controles ---
+
+export async function createControle(
+  data: Omit<Controle, "id" | "createdAt" | "updatedAt">,
+): Promise<Controle> {
+  const response = await api.post("/controles", data);
+  return response.data;
+}
+
+export async function getControle(id: string): Promise<Controle> {
+  const response = await api.get(`/controles/${id}`);
+  return response.data;
+}
+
+export async function updateControle(
+  id: string,
+  data: Partial<Controle>,
+): Promise<Controle> {
+  const response = await api.put(`/controles/${id}`, data);
+  return response.data;
+}
+
+export async function listControles(): Promise<Controle[]> {
+  const response = await api.get("/controles");
+  return response.data;
+}
+
+export async function deleteControle(id: string): Promise<void> {
+  await api.delete(`/controles/${id}`);
+}
+
+export async function runControle(
+  controleId: string,
+  files: Record<string, string>,
+): Promise<ExtractionResponse[]> {
+  const response = await api.post(`/controles/${controleId}/run`, { files });
+  return response.data;
+}
+
+export async function listControleRuns(): Promise<ControleRunResult[]> {
+  const response = await api.get("/controles/runs/all");
   return response.data;
 }

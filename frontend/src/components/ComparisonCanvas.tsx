@@ -408,7 +408,7 @@ function ComparisonPane({
               <Document
                 file={fileUrl}
                 loading={
-                  <div className="p-8 text-muted-foreground text-sm">
+                  <div className="p-8 text-muted-foreground text-sm mt-10">
                     Loading PDF...
                   </div>
                 }

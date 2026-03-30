@@ -11,9 +11,9 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import ClientDetail from "./pages/ClientDetail";
-import NewControl from "./pages/NewControl";
-import NewTemplate from "./pages/NewTemplate";
-import Gallery from "./pages/Gallery";
+import ControleWizard from "./pages/ControleWizard";
+import ControleDetail from "./pages/ControleDetail";
+import RunControle from "./pages/RunControle";
 import Settings from "./pages/Settings";
 import Results from "./pages/Results";
 import RuleLibrary from "./pages/RuleLibrary";
@@ -43,10 +43,11 @@ const App = () => (
                 <Route path="/" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
                 <Route path="/klanten" element={<ProtectedPage><Clients /></ProtectedPage>} />
                 <Route path="/klanten/:clientId" element={<ProtectedPage><ClientDetail /></ProtectedPage>} />
-                <Route path="/controle" element={<ProtectedPage><NewControl /></ProtectedPage>} />
+                <Route path="/controle/nieuw" element={<ProtectedPage><ControleWizard /></ProtectedPage>} />
+                <Route path="/controle/:id" element={<ProtectedPage><ControleDetail /></ProtectedPage>} />
+                <Route path="/controle/:id/edit" element={<ProtectedPage><ControleWizard /></ProtectedPage>} />
+                <Route path="/controle/:id/run" element={<ProtectedPage><RunControle /></ProtectedPage>} />
                 <Route path="/controles" element={<ProtectedPage><MyControls /></ProtectedPage>} />
-                <Route path="/template/nieuw" element={<ProtectedPage><NewTemplate /></ProtectedPage>} />
-                <Route path="/galerij" element={<ProtectedPage><Gallery /></ProtectedPage>} />
                 <Route path="/regels" element={<ProtectedPage><RuleLibrary /></ProtectedPage>} />
                 <Route path="/instellingen" element={<ProtectedPage><Settings /></ProtectedPage>} />
                 <Route path="/resultaten/:taskId" element={<ProtectedPage><Results /></ProtectedPage>} />

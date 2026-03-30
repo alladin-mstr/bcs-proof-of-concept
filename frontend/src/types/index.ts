@@ -42,6 +42,8 @@ export interface FieldRef {
   field_label: string;
   resolution?: CrossTemplateResolution;
   test_run_id?: string;
+  file_id?: string;
+  file_label?: string;
 }
 
 export type RuleOperand =
@@ -289,6 +291,49 @@ export interface TestRunEntry {
   value: string;
   status: string;
   table_data?: Record<string, string>[];
+}
+
+// --- Controle (unified control entity) ---
+
+export interface ControleFile {
+  id: string;
+  label: string;
+  pdfId: string | null;
+  pdfFilename: string | null;
+  pageCount: number;
+  fields: Field[];
+  extractionResults: FieldResult[] | null;
+}
+
+export type ControleStatus = "draft" | "published";
+
+export interface Controle {
+  id: string;
+  name: string;
+  status: ControleStatus;
+  files: ControleFile[];
+  rules: TemplateRule[];
+  computedFields: ComputedField[];
+  ruleGraph: { nodes: unknown[]; edges: unknown[] } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WizardTab = "naam" | "bestanden" | "regels" | "opslaan" | string;
+
+export interface ControleRunResult {
+  id: string;
+  controleId: string;
+  controleName: string;
+  status: "success" | "review" | "error";
+  totalFields: number;
+  passedFields: number;
+  failedFields: number;
+  rulesPassed: number;
+  rulesTotal: number;
+  fileResults: { fileLabel: string; passed: number; total: number }[];
+  entries: TestRunEntry[];
+  runAt: string;
 }
 
 export interface TestRun {

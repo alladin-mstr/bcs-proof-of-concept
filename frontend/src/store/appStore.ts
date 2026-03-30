@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Field, Template, FieldResult, Region, Rule, ChainStep, LayoutBlock, AnchorMode, AnchorRole, Anchor, TestRun, TableColumn, TableConfig, TemplateRule, ComputedField, TemplateRuleResult, DataType } from '../types';
+import type { Field, Template, FieldResult, Region, Rule, ChainStep, LayoutBlock, AnchorMode, AnchorRole, Anchor, TestRun, TableColumn, TableConfig, TemplateRule, ComputedField, TemplateRuleResult, DataType, Controle, ControleFile, WizardTab } from '../types';
 import type { Node, Edge } from '@xyflow/react';
 
 interface AppState {
@@ -164,6 +164,26 @@ interface AppState {
   toggleRightPanel: () => void;
   setTemplateRuleResults: (results: TemplateRuleResult[]) => void;
   setComputedValues: (values: Record<string, string>) => void;
+
+  // --- Controle wizard ---
+  wizardControle: Controle | null;
+  wizardActiveFileId: string | null;
+  wizardActiveTab: WizardTab;
+  wizardSwapping: boolean;
+
+  initWizard: (controle?: Controle, name?: string) => void;
+  setWizardTab: (tab: WizardTab) => void;
+  setWizardName: (name: string) => void;
+  addWizardFile: (file: ControleFile) => void;
+  removeWizardFile: (fileId: string) => void;
+  updateWizardFileLabel: (fileId: string, label: string) => void;
+  setWizardFilePdf: (fileId: string, pdfId: string, pageCount: number, filename: string) => void;
+  saveCurrentFileToWizard: () => void;
+  loadFileIntoStore: (fileId: string) => void;
+  loadAllFieldsForRules: () => void;
+  saveRulesToWizard: () => void;
+  finalizeWizard: () => Controle | null;
+  clearWizard: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -672,4 +692,205 @@ export const useAppStore = create<AppState>((set) => ({
   setTemplateRuleResults: (results) => set({ templateRuleResults: results }),
 
   setComputedValues: (values) => set({ computedValues: values }),
+
+  // --- Controle wizard ---
+  wizardControle: null,
+  wizardActiveFileId: null,
+  wizardActiveTab: "bestanden",
+  wizardSwapping: false,
+
+  initWizard: (controle, name) => {
+    if (controle) {
+      set({
+        wizardControle: controle,
+        wizardActiveTab: "bestanden",
+        wizardActiveFileId: null,
+        templateRules: controle.rules ?? [],
+        computedFields: controle.computedFields ?? [],
+        ruleNodes: (controle.ruleGraph?.nodes as Node[] | undefined) ?? [],
+        ruleEdges: (controle.ruleGraph?.edges as Edge[] | undefined) ?? [],
+      });
+    } else {
+      const now = new Date().toISOString();
+      set({
+        wizardControle: {
+          id: crypto.randomUUID(),
+          name: name ?? "",
+          status: "draft",
+          files: [],
+          rules: [],
+          computedFields: [],
+          ruleGraph: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        wizardActiveTab: "bestanden",
+        wizardActiveFileId: null,
+        fields: [],
+        pdfId: null,
+        pdfFilename: null,
+        pageCount: 0,
+        currentPage: 1,
+        extractionResults: null,
+        templateRules: [],
+        computedFields: [],
+        ruleNodes: [],
+        ruleEdges: [],
+      });
+    }
+  },
+
+  setWizardTab: (tab) =>
+    set((state) => {
+      if (state.wizardSwapping) return {};
+      return { wizardActiveTab: tab };
+    }),
+
+  setWizardName: (name) =>
+    set((state) => {
+      if (!state.wizardControle) return {};
+      return {
+        wizardControle: { ...state.wizardControle, name, updatedAt: new Date().toISOString() },
+      };
+    }),
+
+  addWizardFile: (file) =>
+    set((state) => {
+      if (!state.wizardControle) return {};
+      return {
+        wizardControle: {
+          ...state.wizardControle,
+          files: [...state.wizardControle.files, file],
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    }),
+
+  removeWizardFile: (fileId) =>
+    set((state) => {
+      if (!state.wizardControle) return {};
+      return {
+        wizardControle: {
+          ...state.wizardControle,
+          files: state.wizardControle.files.filter((f) => f.id !== fileId),
+          updatedAt: new Date().toISOString(),
+        },
+        wizardActiveFileId: state.wizardActiveFileId === fileId ? null : state.wizardActiveFileId,
+      };
+    }),
+
+  updateWizardFileLabel: (fileId, label) =>
+    set((state) => {
+      if (!state.wizardControle) return {};
+      return {
+        wizardControle: {
+          ...state.wizardControle,
+          files: state.wizardControle.files.map((f) =>
+            f.id === fileId ? { ...f, label } : f
+          ),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    }),
+
+  setWizardFilePdf: (fileId, pdfId, pageCount, filename) =>
+    set((state) => {
+      if (!state.wizardControle) return {};
+      return {
+        wizardControle: {
+          ...state.wizardControle,
+          files: state.wizardControle.files.map((f) =>
+            f.id === fileId ? { ...f, pdfId, pdfFilename: filename, pageCount } : f
+          ),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    }),
+
+  saveCurrentFileToWizard: () =>
+    set((state) => {
+      if (!state.wizardControle || !state.wizardActiveFileId) return {};
+      return {
+        wizardControle: {
+          ...state.wizardControle,
+          files: state.wizardControle.files.map((f) =>
+            f.id === state.wizardActiveFileId
+              ? { ...f, fields: state.fields, extractionResults: state.extractionResults }
+              : f
+          ),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    }),
+
+  loadFileIntoStore: (fileId) =>
+    set((state) => {
+      if (!state.wizardControle) return {};
+      const file = state.wizardControle.files.find((f) => f.id === fileId);
+      if (!file) return {};
+      return {
+        wizardActiveFileId: fileId,
+        pdfId: file.pdfId,
+        pdfFilename: file.pdfFilename,
+        pageCount: file.pageCount,
+        currentPage: 1,
+        fields: file.fields,
+        extractionResults: file.extractionResults,
+        editingFieldId: null,
+        chainEditFieldId: null,
+        drawingRegionForStepId: null,
+        pendingAnchor: null,
+        templateMode: "single" as const,
+      };
+    }),
+
+  loadAllFieldsForRules: () =>
+    set((state) => {
+      if (!state.wizardControle) return {};
+      const allFields: (Field & { _wizardFileId?: string; _wizardFileLabel?: string })[] = [];
+      for (const file of state.wizardControle.files) {
+        for (const field of file.fields) {
+          allFields.push({
+            ...field,
+            _wizardFileId: file.id,
+            _wizardFileLabel: file.label,
+          });
+        }
+      }
+      return { fields: allFields as Field[] };
+    }),
+
+  saveRulesToWizard: () =>
+    set((state) => {
+      if (!state.wizardControle) return {};
+      return {
+        wizardControle: {
+          ...state.wizardControle,
+          rules: state.templateRules,
+          computedFields: state.computedFields,
+          ruleGraph: { nodes: state.ruleNodes, edges: state.ruleEdges },
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    }),
+
+  finalizeWizard: () => {
+    const state = useAppStore.getState();
+    if (!state.wizardControle) return null;
+    return {
+      ...state.wizardControle,
+      rules: state.templateRules,
+      computedFields: state.computedFields,
+      ruleGraph: { nodes: state.ruleNodes, edges: state.ruleEdges },
+      updatedAt: new Date().toISOString(),
+    };
+  },
+
+  clearWizard: () =>
+    set({
+      wizardControle: null,
+      wizardActiveFileId: null,
+      wizardActiveTab: "naam",
+      wizardSwapping: false,
+    }),
 }));

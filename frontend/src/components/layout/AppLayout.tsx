@@ -16,16 +16,22 @@ interface AppLayoutProps {
   children: ReactNode;
 }
 
-const routeLabels: Record<string, string> = {
-  "/": "Dashboard",
-  "/controle": "Nieuwe controle",
-  "/controles": "Mijn controles",
-  "/klanten": "Klanten",
-  "/galerij": "Galerij",
-  "/regels": "Regelbibliotheek",
-  "/template/nieuw": "Nieuwe template",
-  "/instellingen": "Instellingen",
-  "/resultaten": "Resultaten",
+// label + linkTo for breadcrumb segments
+const routeLabels: Record<string, { label: string; linkTo?: string }> = {
+  "/": { label: "Dashboard" },
+  "/controle": { label: "Controles", linkTo: "/controles" },
+  "/controle/nieuw": { label: "Nieuwe controle" },
+  "/controles": { label: "Mijn controles" },
+  "/klanten": { label: "Klanten" },
+  "/regels": { label: "Regelbibliotheek" },
+  "/instellingen": { label: "Instellingen" },
+  "/resultaten": { label: "Resultaten", linkTo: "/controles" },
+};
+
+const segmentLabels: Record<string, string> = {
+  run: "Uitvoeren",
+  edit: "Bewerken",
+  nieuw: "Nieuwe controle",
 };
 
 function AppBreadcrumbs() {
@@ -34,16 +40,22 @@ function AppBreadcrumbs() {
 
   const segments: { label: string; path: string }[] = [];
 
-  if (routeLabels[pathname]) {
-    segments.push({ label: routeLabels[pathname], path: pathname });
+  const route = routeLabels[pathname];
+  if (route) {
+    segments.push({ label: route.label, path: route.linkTo ?? pathname });
   } else {
     const parts = pathname.split("/").filter(Boolean);
     let builtPath = "";
     for (const part of parts) {
       builtPath += `/${part}`;
-      const label = routeLabels[builtPath];
-      if (label) {
-        segments.push({ label, path: builtPath });
+      const r = routeLabels[builtPath];
+      if (r) {
+        segments.push({ label: r.label, path: r.linkTo ?? builtPath });
+      } else if (segmentLabels[part]) {
+        segments.push({ label: segmentLabels[part], path: builtPath });
+      } else if (/^[0-9a-f]{8}-/.test(part)) {
+        // Skip UUID segments in breadcrumbs
+        continue;
       } else {
         segments.push({ label: decodeURIComponent(part), path: builtPath });
       }

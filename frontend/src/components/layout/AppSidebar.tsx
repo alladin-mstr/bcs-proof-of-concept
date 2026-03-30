@@ -1,4 +1,4 @@
-import { Home, Users, PlayCircle, FolderOpen, Plus, Settings, ChevronDown, ClipboardCheck, LogOut, BookOpen, ListChecks, MoreVertical, Sun, Moon, Monitor } from "lucide-react";
+import { Home, Users, Settings, ChevronDown, ClipboardCheck, LogOut, BookOpen, ListChecks, MoreVertical, Sun, Moon, Monitor } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useTaskContext } from "@/context/TaskContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -106,18 +106,6 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <NavLink
-                    to="/controle"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
-                  >
-                    <PlayCircle className="h-5 w-5" />
-                    <span>Nieuwe controle</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
                     to="/controles"
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
                     activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
@@ -143,25 +131,13 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Templates Section */}
+        {/* Regelbibliotheek */}
         <SidebarGroup className="mt-6">
           <SidebarGroupLabel className="text-xs text-sidebar-muted font-semibold uppercase tracking-wider mb-2">
-            Templates
+            Hulpmiddelen
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/galerij"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
-                  >
-                    <FolderOpen className="h-5 w-5" />
-                    <span>Galerij</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <NavLink
@@ -171,18 +147,6 @@ export function AppSidebar() {
                   >
                     <BookOpen className="h-5 w-5" />
                     <span>Regelbibliotheek</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
-                    to="/template/nieuw"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
-                  >
-                    <Plus className="h-5 w-5" />
-                    <span>Nieuwe template</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>

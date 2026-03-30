@@ -19,7 +19,7 @@ import '@xyflow/react/dist/style.css';
 import { useAppStore } from '@/store/appStore';
 import { nodeTypes } from './RuleNodes';
 import { serializeGraph } from './serializeGraph';
-import { listAllTemplateFields, listTestRuns, updateTemplate as apiUpdateTemplate, type TemplateFieldInfo } from '../../api/client';
+import { listAllTemplateFields, listTestRuns, listControleRuns, updateTemplate as apiUpdateTemplate, type TemplateFieldInfo } from '../../api/client';
 import type { RuleNodeData, MathOperation, CompareOperator, AggregateOperation, RowFilterMode, DataType, TestRun, Field } from '../../types';
 import {
   Plus, Minus, X, Divide, Sigma, BarChart3, ArrowDownNarrowWide, ArrowUpNarrowWide,
@@ -123,22 +123,51 @@ export default function RulesPanel() {
   const [externalTemplates, setExternalTemplates] = useState<TemplateFieldInfo[]>([]);
   const [externalRuns, setExternalRuns] = useState<TestRun[]>([]);
   const savedTestRuns = useAppStore((s) => s.savedTestRuns);
+  const setSavedTestRuns = useAppStore((s) => s.setSavedTestRuns);
   const templates = useAppStore((s) => s.templates);
+
+  // Load cross-template data (test runs + controle runs) on mount for table previews
+  useEffect(() => {
+    Promise.all([
+      listTestRuns().catch(() => [] as TestRun[]),
+      listControleRuns().catch(() => []),
+    ]).then(([testRuns, controleRuns]) => {
+      const converted: TestRun[] = controleRuns
+        .filter((cr) => cr.entries && cr.entries.length > 0)
+        .map((cr) => ({
+          id: cr.id,
+          pdf_id: '',
+          pdf_filename: cr.controleName,
+          template_name: cr.controleName,
+          template_id: cr.controleId,
+          entries: cr.entries,
+          created_at: cr.runAt,
+        }));
+      setSavedTestRuns([...testRuns, ...converted]);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-populate field input nodes from template fields
   const fieldNodes = useMemo(() =>
-    fields.map((f, i) => ({
-      id: `field-${f.id}`,
-      type: 'field_input' as const,
-      position: { x: 0, y: i * 80 },
-      data: {
-        label: f.label,
-        nodeType: 'field_input' as const,
-        fieldRef: { field_label: f.label },
-        literalDatatype: f.detected_datatype || f.value_format || 'string',
-        fieldType: f.type,
-      } as RuleNodeData,
-    })),
+    fields.map((f, i) => {
+      const wizardFileId = (f as Field & { _wizardFileId?: string })._wizardFileId;
+      const wizardFileLabel = (f as Field & { _wizardFileLabel?: string })._wizardFileLabel;
+      return {
+        id: `field-${f.id}`,
+        type: 'field_input' as const,
+        position: { x: 0, y: i * 80 },
+        data: {
+          label: f.label,
+          nodeType: 'field_input' as const,
+          fieldRef: {
+            field_label: f.label,
+            ...(wizardFileId && { file_id: wizardFileId, file_label: wizardFileLabel }),
+          },
+          literalDatatype: f.detected_datatype || f.value_format || 'string',
+          fieldType: f.type,
+        } as RuleNodeData,
+      };
+    }),
     [fields]
   );
 
@@ -280,9 +309,23 @@ export default function RulesPanel() {
       listAllTemplateFields()
         .then((t) => setExternalTemplates(t.filter((tt) => tt.template_id !== activeTemplateId)))
         .catch(() => {});
-      listTestRuns()
-        .then(setExternalRuns)
-        .catch(() => {});
+      Promise.all([
+        listTestRuns().catch(() => [] as TestRun[]),
+        listControleRuns().catch(() => []),
+      ]).then(([testRuns, controleRuns]) => {
+        const converted: TestRun[] = controleRuns
+          .filter((cr) => cr.entries && cr.entries.length > 0)
+          .map((cr) => ({
+            id: cr.id,
+            pdf_id: '',
+            pdf_filename: cr.controleName,
+            template_name: cr.controleName,
+            template_id: cr.controleId,
+            entries: cr.entries,
+            created_at: cr.runAt,
+          }));
+        setExternalRuns([...testRuns, ...converted]);
+      });
     }
   }, [showAddMenu, menuCategory, activeTemplateId]);
 
@@ -437,7 +480,8 @@ export default function RulesPanel() {
       ruleResultMap[r.rule_id] = r;
     }
 
-    setRuleNodes(ruleNodes.map((n) => {
+    const currentNodes = useAppStore.getState().ruleNodes;
+    setRuleNodes(currentNodes.map((n) => {
       const data = n.data as RuleNodeData;
       let updated = false;
       const patch: Partial<RuleNodeData> = {};
@@ -534,7 +578,7 @@ export default function RulesPanel() {
       if (!updated) return n;
       return { ...n, data: { ...data, ...patch } };
     }));
-  }, [extractionResults, templateRuleResults, computedValues, savedTestRuns, ruleNodes.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [extractionResults, templateRuleResults, computedValues, savedTestRuns]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col h-full">
@@ -554,6 +598,7 @@ export default function RulesPanel() {
             </button>
           )}
           <button
+            data-add-node-btn
             onClick={() => setShowAddMenu(!showAddMenu)}
             className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-primary bg-primary/10 rounded-md hover:bg-primary/20 transition-colors"
           >
@@ -569,7 +614,7 @@ export default function RulesPanel() {
       {showAddMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />
-          <div className="absolute right-2 top-12 z-50 w-72 bg-popover border border-border rounded-lg shadow-lg overflow-hidden">
+          <div className="fixed right-auto top-auto z-50 w-72 bg-popover border border-border rounded-lg shadow-lg overflow-hidden" style={{ top: (document.querySelector('[data-add-node-btn]') as HTMLElement)?.getBoundingClientRect().bottom ?? 48, right: window.innerWidth - ((document.querySelector('[data-add-node-btn]') as HTMLElement)?.getBoundingClientRect().right ?? 0) }}>
             <div className="flex border-b border-border">
               {CATEGORIES.map((cat) => (
                 <button

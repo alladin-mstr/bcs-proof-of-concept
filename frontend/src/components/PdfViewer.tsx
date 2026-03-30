@@ -43,7 +43,7 @@ export default function PdfViewer() {
         className="relative inline-block shadow-lg rounded-lg overflow-hidden border border-border"
         style={{ userSelect: 'none' }}
       >
-        <Document file={fileUrl} loading={<div className="p-8 text-muted-foreground">Loading PDF...</div>}>
+        <Document file={fileUrl} loading={<div className="p-8 text-muted-foreground h-full w-full flex justify-center items-center text-center mt-10">Loading PDF...</div>}>
           <Page
             pageNumber={currentPage}
             scale={zoom}

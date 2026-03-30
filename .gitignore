@@ -22,3 +22,4 @@ research/
 node_modules/
 
 backend/storage/test_runs
+backend/storage/

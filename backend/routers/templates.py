@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from models.schemas import Template, TemplateCreate
+from services.controle_store import list_controles
 from services.template_store import (
     delete_template,
     get_template,
@@ -69,6 +70,28 @@ async def get_all_template_fields():
         result.append({
             "template_id": t.id,
             "template_name": t.name,
+            "fields": fields + computed,
+        })
+    # Also include controles (multi-file controls) as field sources
+    for c in list_controles():
+        fields = []
+        for file_def in c.files:
+            for f in file_def.fields:
+                entry: dict = {
+                    "label": f"{file_def.label} → {f.label}" if len(c.files) > 1 else f.label,
+                    "datatype": f.value_format or f.detected_datatype,
+                    "field_type": f.type,
+                }
+                if f.type == "table" and f.table_config:
+                    entry["table_columns"] = [{"id": col.id, "label": col.label} for col in f.table_config.columns]
+                fields.append(entry)
+        computed = [
+            {"label": cf.label, "datatype": cf.datatype, "computed": True}
+            for cf in c.computedFields
+        ]
+        result.append({
+            "template_id": c.id,
+            "template_name": c.name,
             "fields": fields + computed,
         })
     return result
