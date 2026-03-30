@@ -241,7 +241,7 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
 
   return (
     <>
-    <div className={`w-72 border-r border-border flex flex-col bg-background ${embedded ? "h-full" : "max-h-[85vh]"}`}>
+    <div className={`w-72 border-r border-border flex flex-col bg-background ${embedded ? "max-h-[80vh]" : "max-h-[75vh]"}`}>
       {/* Mode indicator */}
       {!embedded && <div className={`px-4 py-3 border-b flex-shrink-0 ${
         isTestingMode
@@ -339,7 +339,7 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
       )}
 
       {/* Fields header + comparison tab switcher */}
-      <div className="px-4 py-3 border-b border-border flex-shrink-0">
+      <div className="px-4 py-3 border-b border-border max-h-[90vh] flex-shrink-0">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
             Fields

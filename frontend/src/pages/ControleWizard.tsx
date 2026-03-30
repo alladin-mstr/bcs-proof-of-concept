@@ -47,7 +47,7 @@ export default function ControleWizard() {
           toast({ title: "Controle niet gevonden", variant: "destructive" });
           navigate("/controles");
         });
-    } else if (!wizardControle) {
+    } else {
       const nameFromParams = searchParams.get("naam") ?? "";
       initWizard(undefined, nameFromParams);
     }

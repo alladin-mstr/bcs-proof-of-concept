@@ -36,11 +36,11 @@ export default function PdfViewer() {
   const fileUrl = getPdfUrl(pdfId);
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-start min-w-fit">
       {/* PDF + overlay */}
       <div
         ref={containerRef}
-        className="relative inline-block shadow-lg rounded-lg overflow-hidden border border-border"
+        className="relative inline-block shadow-lg rounded-lg overflow-hidden border border-border mx-auto"
         style={{ userSelect: 'none' }}
       >
         <Document file={fileUrl} loading={<div className="p-8 text-muted-foreground h-full w-full flex justify-center items-center text-center mt-10">Loading PDF...</div>}>

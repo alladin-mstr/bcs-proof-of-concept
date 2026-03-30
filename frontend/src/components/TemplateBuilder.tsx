@@ -356,7 +356,7 @@ function TemplateBuilder({ embedded = false }: { embedded?: boolean } = {}) {
       </header>}
 
       {/* Main content */}
-      <div className={`flex flex-1 overflow-hidden h-full ${embedded ? "" : "max-h-[90vh]"}`}>
+      <div className={`flex flex-1 overflow-hidden h-full ${embedded ? "max-h-[80vh]" : "max-h-[80vh]"}`}>
         {pdfId && <TemplatePanel embedded={embedded} />}
 
         {/* PDF collapsed strip */}
@@ -384,7 +384,7 @@ function TemplateBuilder({ embedded = false }: { embedded?: boolean } = {}) {
           {!pdfCollapsed && (
             <>
               <ResizablePanel defaultSize={60} minSize={20}>
-                <main className={`h-full ${templateMode === 'comparison' ? 'overflow-hidden' : 'overflow-y-auto'} min-w-0 bg-muted relative`}>
+                <main className={`h-full ${templateMode === 'comparison' ? 'overflow-hidden' : 'overflow-auto'} min-w-0 bg-muted relative`}>
                   {/* Collapse button */}
                   {!embedded && (
                     <button
@@ -396,6 +396,76 @@ function TemplateBuilder({ embedded = false }: { embedded?: boolean } = {}) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </button>
+                  )}
+                  {/* Floating controls for embedded mode */}
+                  {embedded && pdfId && templateMode !== 'comparison' && (
+                    <div className="sticky top-0 z-10 flex justify-center py-1.5">
+                      <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded-lg border border-border px-2 py-1 shadow-sm">
+                        <button
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage <= 1}
+                          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <span className="text-[11px] text-foreground/70 font-medium min-w-[40px] text-center">
+                          {currentPage} / {pageCount}
+                        </span>
+                        <button
+                          onClick={() => setCurrentPage(Math.min(pageCount, currentPage + 1))}
+                          disabled={currentPage >= pageCount}
+                          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+
+                        <div className="w-px h-4 bg-border mx-0.5" />
+
+                        <button
+                          onClick={zoomOut}
+                          disabled={zoomIndex <= 0}
+                          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={resetZoom}
+                          className="text-[10px] font-medium text-foreground/70 hover:text-foreground px-1 py-0.5 rounded hover:bg-muted transition-colors min-w-[36px] text-center"
+                        >
+                          {Math.round(ZOOM_LEVELS[zoomIndex] * 100)}%
+                        </button>
+                        <button
+                          onClick={zoomIn}
+                          disabled={zoomIndex >= ZOOM_LEVELS.length - 1}
+                          className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+
+                        <div className="w-px h-4 bg-border mx-0.5" />
+
+                        <button
+                          onClick={() => setShowMarkers(!showMarkers)}
+                          className={`p-0.5 rounded transition-colors ${
+                            showMarkers ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                          title={showMarkers ? 'Hide markers' : 'Show markers'}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   )}
                   {pdfId && templateMode === 'comparison' ? (
                     <ComparisonCanvas />

@@ -4,21 +4,80 @@ import pdfplumber
 from models.schemas import Region
 
 
+def _get_form_field_words(page, pw: float, ph: float) -> list[dict]:
+    """Extract form field values as word-like dicts from PDF annotations.
+
+    PDF form fields (Widget annotations) store values separately from
+    the page text stream. This function reads those values and returns
+    them in the same format as pdfplumber's extract_words(), so they
+    can be used alongside regular text extraction.
+    """
+    words = []
+    annots = page.annots if hasattr(page, 'annots') and page.annots else []
+    for annot in annots:
+        data = annot.get('data', {})
+        if str(data.get('Subtype', '')) != "/'Widget'":
+            continue
+        v = data.get('V', '')
+        if isinstance(v, bytes):
+            v = v.decode('utf-8', errors='replace')
+        v = str(v).strip()
+        if not v or v in ('', 'Kies...'):
+            continue
+        rect = data.get('Rect', [])
+        if len(rect) < 4:
+            continue
+        x0, y0_pdf, x1, y1_pdf = [float(r) for r in rect]
+        # PDF annotations use bottom-left origin; convert to top-left
+        top = ph - y1_pdf
+        bottom = ph - y0_pdf
+        for token in v.split():
+            words.append({
+                'text': token,
+                'x0': x0,
+                'x1': x1,
+                'top': top,
+                'bottom': bottom,
+                '_form_field': True,
+            })
+    return words
+
+
+def _extract_form_field_text_in_bbox(page, abs_bbox: tuple, pw: float, ph: float) -> str:
+    """Extract form field values that fall within a bounding box."""
+    x0, y0, x1, y1 = abs_bbox
+    texts = []
+    for w in _get_form_field_words(page, pw, ph):
+        # Check if the form field overlaps with the bounding box
+        wx0, wtop = float(w['x0']), float(w['top'])
+        wx1, wbottom = float(w['x1']), float(w['bottom'])
+        if wx1 > x0 and wx0 < x1 and wbottom > y0 and wtop < y1:
+            texts.append(w['text'])
+    return " ".join(texts)
+
+
 def extract_text_from_region(pdf_path: str, region: Region) -> str:
-    """Extract text from a normalized region of a PDF page."""
+    """Extract text from a normalized region of a PDF page.
+
+    Extracts both regular page text and form field (annotation) values.
+    """
     with pdfplumber.open(pdf_path) as pdf:
         page_idx = region.page - 1
         if page_idx < 0 or page_idx >= len(pdf.pages):
             return ""
         page = pdf.pages[page_idx]
+        pw, ph = float(page.width), float(page.height)
         abs_bbox = (
-            region.x * float(page.width),
-            region.y * float(page.height),
-            (region.x + region.width) * float(page.width),
-            (region.y + region.height) * float(page.height),
+            region.x * pw,
+            region.y * ph,
+            (region.x + region.width) * pw,
+            (region.y + region.height) * ph,
         )
         cropped = page.crop(abs_bbox)
-        return (cropped.extract_text() or "").strip()
+        text = (cropped.extract_text() or "").strip()
+        if not text:
+            text = _extract_form_field_text_in_bbox(page, abs_bbox, pw, ph)
+        return text
 
 
 def get_page_count(pdf_path: str) -> int:
@@ -493,18 +552,21 @@ def search_value_near_anchor(
         page = pdf.pages[page_idx]
         pw, ph = float(page.width), float(page.height)
 
-        # Get all words on the page
+        # Get all words on the page (including form field values)
         words = page.extract_words()
+        words.extend(_get_form_field_words(page, pw, ph))
         if not words:
             return None
 
         anchor_y_abs = anchor_y * ph
         anchor_right_abs = (anchor_x + anchor_width) * pw
 
-        # Find words on the same line as the anchor (within 5pt y tolerance)
+        # Find words on the same line as the anchor (within 10pt y tolerance).
+        # Form field annotations can be offset a few points from the label text,
+        # so we use a slightly wider tolerance than pure text matching.
         same_line_words = []
         for w in words:
-            if abs(float(w["top"]) - anchor_y_abs) < 5:
+            if abs(float(w["top"]) - anchor_y_abs) < 10:
                 same_line_words.append(w)
 
         if not same_line_words:
