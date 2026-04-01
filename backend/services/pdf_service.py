@@ -59,6 +59,10 @@ def _extract_form_field_text_in_bbox(page, abs_bbox: tuple, pw: float, ph: float
 def extract_text_from_region(pdf_path: str, region: Region) -> str:
     """Extract text from a normalized region of a PDF page.
 
+    Uses character-level filtering: only characters whose x-midpoint falls
+    within the region are included. This gives exact-box extraction — if the
+    box cuts through a word, only the characters inside are returned.
+
     Extracts both regular page text and form field (annotation) values.
     """
     with pdfplumber.open(pdf_path) as pdf:
@@ -73,11 +77,220 @@ def extract_text_from_region(pdf_path: str, region: Region) -> str:
             (region.x + region.width) * pw,
             (region.y + region.height) * ph,
         )
-        cropped = page.crop(abs_bbox)
-        text = (cropped.extract_text() or "").strip()
-        if not text:
-            text = _extract_form_field_text_in_bbox(page, abs_bbox, pw, ph)
-        return text
+        x0, y0, x1, y1 = abs_bbox
+
+        # Character-level extraction for exact box cutting
+        chars = page.chars
+        matched = []
+        for c in chars:
+            cx = (float(c['x0']) + float(c['x1'])) / 2
+            cy = (float(c['top']) + float(c['bottom'])) / 2
+            if cx >= x0 and cx <= x1 and cy >= y0 and cy <= y1:
+                matched.append(c)
+
+        # Also collect form field words in the region
+        form_words = _get_form_field_words(page, pw, ph)
+        form_matched = []
+        for w in form_words:
+            wmx = (float(w['x0']) + float(w['x1'])) / 2
+            wmy = (float(w['top']) + float(w['bottom'])) / 2
+            if wmx >= x0 and wmx <= x1 and wmy >= y0 and wmy <= y1:
+                form_matched.append(w)
+
+        # Merge chars and form field words into unified line-based output
+        if matched or form_matched:
+            # Build list of (top, x0, text_fragment) items for sorting
+            items: list[tuple[float, float, str]] = []
+
+            if matched:
+                matched.sort(key=lambda c: (float(c['top']), float(c['x0'])))
+                current_line: list[dict] = []
+                last_top = None
+                for c in matched:
+                    ctop = round(float(c['top']), 1)
+                    if last_top is not None and abs(ctop - last_top) > 3:
+                        items.append((float(current_line[0]['top']), float(current_line[0]['x0']), _chars_to_text(current_line)))
+                        current_line = []
+                    current_line.append(c)
+                    last_top = ctop
+                if current_line:
+                    items.append((float(current_line[0]['top']), float(current_line[0]['x0']), _chars_to_text(current_line)))
+
+            for w in form_matched:
+                # Form field Rect x0 spans the whole widget box, which often
+                # starts before the visible label chars.  Use x1 (right edge)
+                # as sort key so form values land after label text.
+                items.append((float(w['top']), float(w['x1']), w['text']))
+
+            # Group items into lines using vertical proximity, then sort
+            # each line by horizontal position.
+            # First, sort by y to cluster.
+            items.sort(key=lambda t: t[0])
+            line_groups: list[list[tuple[float, float, str]]] = []
+            for item in items:
+                placed = False
+                for group in line_groups:
+                    # Use vertical midpoint of the group for comparison
+                    group_y = sum(i[0] for i in group) / len(group)
+                    if abs(item[0] - group_y) <= 6:
+                        group.append(item)
+                        placed = True
+                        break
+                if not placed:
+                    line_groups.append([item])
+            # Sort groups by their top-most y, then items within by x
+            line_groups.sort(key=lambda g: min(i[0] for i in g))
+            lines: list[str] = []
+            for group in line_groups:
+                group.sort(key=lambda t: t[1])
+                lines.append(" ".join(t[2] for t in group))
+            text = "\n".join(lines).strip()
+            if text:
+                return text
+
+        return ""
+
+
+def _chars_to_text(chars: list[dict]) -> str:
+    """Convert a list of character dicts to text, inserting spaces at gaps."""
+    if not chars:
+        return ""
+    chars.sort(key=lambda c: float(c['x0']))
+    parts = []
+    for i, c in enumerate(chars):
+        if i > 0:
+            gap = float(c['x0']) - float(chars[i - 1]['x1'])
+            avg_width = (float(c['x1']) - float(c['x0']))
+            if gap > avg_width * 0.3:
+                parts.append(" ")
+        parts.append(c.get('text', ''))
+    return "".join(parts)
+
+
+def resolve_extraction_region(
+    pdf_path: str, region: Region, extraction_mode: str
+) -> tuple[Region, str]:
+    """Expand a region according to extraction_mode and extract text.
+
+    Returns (resolved_region, text). For 'strict' mode, resolved_region == region.
+    """
+    if extraction_mode == "strict":
+        text = extract_text_from_region(pdf_path, region)
+        return (region, text)
+
+    if extraction_mode == "edge":
+        expanded = Region(
+            page=region.page, x=region.x, y=region.y,
+            width=1.0 - region.x, height=region.height,
+        )
+        text = extract_text_from_region(pdf_path, expanded)
+        return (expanded, text)
+
+    from pdfminer.layout import LTTextBox, LTTextLine
+
+    with pdfplumber.open(pdf_path, laparams={
+        "boxes_flow": 0.5, "line_margin": 1.0, "word_margin": 0.1,
+    }) as pdf:
+        page_idx = region.page - 1
+        if page_idx < 0 or page_idx >= len(pdf.pages):
+            return (region, "")
+        page = pdf.pages[page_idx]
+        pw, ph = float(page.width), float(page.height)
+
+        # Absolute bbox of the drawn region
+        ax0 = region.x * pw
+        ay0 = region.y * ph
+        ax1 = (region.x + region.width) * pw
+        ay1 = (region.y + region.height) * ph
+
+        if extraction_mode == "word":
+            words = page.extract_words() + _get_form_field_words(page, pw, ph)
+            # Find words whose horizontal midpoint falls within the drawn region
+            matched = []
+            for w in words:
+                wx0, wx1 = float(w['x0']), float(w['x1'])
+                wy0 = float(w['top'])
+                wy1 = float(w['bottom'])
+                wmx = (wx0 + wx1) / 2
+                if wmx >= ax0 and wmx <= ax1 and wy1 > ay0 and wy0 < ay1:
+                    matched.append(w)
+            if not matched:
+                text = extract_text_from_region(pdf_path, region)
+                return (region, text)
+            # Expand right edge to include full words
+            new_x1 = max(float(w['x1']) for w in matched)
+            new_x1 = max(new_x1, ax1)  # Never shrink
+            expanded = Region(
+                page=region.page,
+                x=region.x, y=region.y,
+                width=new_x1 / pw - region.x,
+                height=region.height,
+            )
+            text = " ".join(w['text'] for w in sorted(matched, key=lambda w: (float(w['top']), float(w['x0']))))
+            return (expanded, text)
+
+        if extraction_mode == "line":
+            # Find LTTextLine elements overlapping the drawn region
+            new_x1 = ax1
+            found_lines = []
+            for element in page.layout:
+                if not isinstance(element, LTTextBox):
+                    continue
+                for child in element:
+                    if not isinstance(child, LTTextLine):
+                        continue
+                    lb = child.bbox  # (x0, y0_bottom, x1, y1_top) — bottom-left origin
+                    lx0, ly0, lx1, ly1 = lb[0], (ph - lb[3]), lb[2], (ph - lb[1])
+                    # Check vertical + horizontal overlap
+                    if lx1 > ax0 and lx0 < ax1 and ly1 > ay0 and ly0 < ay1:
+                        new_x1 = max(new_x1, lx1)
+                        found_lines.append(child)
+            if not found_lines:
+                text = extract_text_from_region(pdf_path, region)
+                return (region, text)
+            expanded = Region(
+                page=region.page,
+                x=region.x, y=region.y,
+                width=new_x1 / pw - region.x,
+                height=region.height,
+            )
+            text = extract_text_from_region(pdf_path, expanded)
+            return (expanded, text)
+
+        if extraction_mode == "paragraph":
+            # Find LTTextBox block overlapping the drawn region
+            best_block = None
+            best_overlap = 0
+            for element in page.layout:
+                if not isinstance(element, LTTextBox):
+                    continue
+                bb = element.bbox  # (x0, y0_bottom, x1, y1_top)
+                bx0, by0, bx1, by1 = bb[0], (ph - bb[3]), bb[2], (ph - bb[1])
+                # Check overlap
+                ox0, oy0 = max(bx0, ax0), max(by0, ay0)
+                ox1, oy1 = min(bx1, ax1), min(by1, ay1)
+                if ox0 < ox1 and oy0 < oy1:
+                    overlap = (ox1 - ox0) * (oy1 - oy0)
+                    if overlap > best_overlap:
+                        best_overlap = overlap
+                        best_block = element
+            if best_block is None:
+                text = extract_text_from_region(pdf_path, region)
+                return (region, text)
+            bb = best_block.bbox
+            expanded = Region(
+                page=region.page,
+                x=bb[0] / pw,
+                y=(ph - bb[3]) / ph,
+                width=(bb[2] - bb[0]) / pw,
+                height=(bb[3] - bb[1]) / ph,
+            )
+            text = best_block.get_text().strip()
+            return (expanded, text)
+
+    # Fallback
+    text = extract_text_from_region(pdf_path, region)
+    return (region, text)
 
 
 def get_page_count(pdf_path: str) -> int:
@@ -683,6 +896,37 @@ def get_page_layout(pdf_path: str, page_num: int, line_margin: float = 1.0) -> l
             block_idx += 1
 
         return blocks
+
+
+def get_page_words(pdf_path: str, page_num: int) -> list[dict]:
+    """Extract individual words with bounding boxes from a PDF page.
+
+    Returns a list of dicts with:
+      - text: the word text
+      - x, y, width, height: normalized 0-1 coordinates
+    """
+    with pdfplumber.open(pdf_path) as pdf:
+        page_idx = page_num - 1
+        if page_idx < 0 or page_idx >= len(pdf.pages):
+            return []
+        page = pdf.pages[page_idx]
+        pw, ph = float(page.width), float(page.height)
+
+        raw_words = page.extract_words() + _get_form_field_words(page, pw, ph)
+        result = []
+        for w in raw_words:
+            x0 = float(w['x0']) / pw
+            y0 = float(w['top']) / ph
+            x1 = float(w['x1']) / pw
+            y1 = float(w['bottom']) / ph
+            result.append({
+                "text": w['text'],
+                "x": x0,
+                "y": y0,
+                "width": x1 - x0,
+                "height": y1 - y0,
+            })
+        return result
 
 
 def extract_table(

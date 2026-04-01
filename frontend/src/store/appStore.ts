@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Field, Template, FieldResult, Region, Rule, ChainStep, LayoutBlock, AnchorMode, AnchorRole, Anchor, TestRun, TableColumn, TableConfig, TemplateRule, ComputedField, TemplateRuleResult, DataType, Controle, ControleFile, WizardTab } from '../types';
+import type { Field, Template, FieldResult, Region, Rule, ChainStep, LayoutBlock, AnchorMode, AnchorRole, Anchor, TestRun, TableColumn, TableConfig, TemplateRule, ComputedField, TemplateRuleResult, DataType, ExtractionMode, Controle, ControleFile, WizardTab } from '../types';
 import type { Node, Edge } from '@xyflow/react';
 
 interface AppState {
@@ -14,6 +14,10 @@ interface AppState {
 
   // Drawing mode
   drawMode: "static" | "dynamic";
+  // Tool mode: pointer (click-to-select word), draw (freehand box), table (wizard)
+  drawTool: "pointer" | "draw";
+  // Cached words for pointer tool (keyed by "pdfId:page")
+  pageWordsCache: Record<string, { text: string; x: number; y: number; width: number; height: number }[]>;
   // For dynamic fields: tracks the pending anchor while waiting for value draw
   pendingAnchor: { region: Region; expectedText: string } | null;
 
@@ -67,6 +71,8 @@ interface AppState {
   loadTemplate: (template: Template) => void;
   setExtractionResults: (results: FieldResult[] | null) => void;
   setDrawMode: (mode: "static" | "dynamic") => void;
+  setDrawTool: (tool: "pointer" | "draw") => void;
+  setPageWords: (key: string, words: { text: string; x: number; y: number; width: number; height: number }[]) => void;
   setPendingAnchor: (anchor: { region: Region; expectedText: string } | null) => void;
   editTemplate: (template: Template) => void;
   addRule: (fieldId: string, rule: Rule) => void;
@@ -76,6 +82,7 @@ interface AppState {
   setEditingFieldId: (id: string | null) => void;
   updateFieldLabel: (fieldId: string, label: string) => void;
   updateFieldDataType: (fieldId: string, datatype: DataType | undefined) => void;
+  updateFieldExtractionMode: (fieldId: string, mode: ExtractionMode) => void;
 
   // Chain operations
   setChainEditFieldId: (id: string | null) => void;
@@ -196,6 +203,8 @@ export const useAppStore = create<AppState>((set) => ({
   extractionResults: null,
   activeTemplateId: null,
   drawMode: "static",
+  drawTool: "pointer",
+  pageWordsCache: {},
   pendingAnchor: null,
   editingFieldId: null,
   chainEditFieldId: null,
@@ -265,6 +274,12 @@ export const useAppStore = create<AppState>((set) => ({
 
   setDrawMode: (mode) => set({ drawMode: mode, pendingAnchor: null }),
 
+  setDrawTool: (tool) => set({ drawTool: tool }),
+
+  setPageWords: (key, words) => set((state) => ({
+    pageWordsCache: { ...state.pageWordsCache, [key]: words },
+  })),
+
   setPendingAnchor: (anchor) => set({ pendingAnchor: anchor }),
 
   addRule: (fieldId, rule) =>
@@ -297,6 +312,13 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({
       fields: state.fields.map((f) =>
         f.id === fieldId ? { ...f, detected_datatype: datatype } : f
+      ),
+    })),
+
+  updateFieldExtractionMode: (fieldId, mode) =>
+    set((state) => ({
+      fields: state.fields.map((f) =>
+        f.id === fieldId ? { ...f, extraction_mode: mode } : f
       ),
     })),
 

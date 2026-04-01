@@ -1,12 +1,13 @@
 import re
 from datetime import datetime, date
 from models.schemas import (
-    Field, FieldResult, Rule, RuleResult, StepTrace,
+    Field, FieldResult, Region, Rule, RuleResult, StepTrace,
     TemplateRule, ComputedField, TemplateRuleResult, ExtractionResponse,
 )
 from services.pdf_service import (
     extract_text_from_region,
     extract_text_from_shifted_region,
+    resolve_extraction_region,
     search_anchor_slide,
     search_anchor_fullpage,
     search_value_near_anchor,
@@ -548,6 +549,7 @@ def extract_all_fields(
                     "step_traces": step_traces,
                     "uses_chain": False,
                     "resolved_table_height": resolved_table_height,
+                    "resolved_region": None,
                 })
             else:
                 all_values[field.label] = ""
@@ -568,6 +570,7 @@ def extract_all_fields(
                     "step_traces": [],
                     "uses_chain": False,
                     "resolved_table_height": None,
+                    "resolved_region": None,
                 })
             continue
 
@@ -590,9 +593,11 @@ def extract_all_fields(
                 "anchors_found": resolved.get("anchors_found", {}),
                 "step_traces": resolved.get("step_traces", []),
                 "uses_chain": True,
+                "resolved_region": None,
             })
         elif field.type == "static":
-            value = extract_text_from_region(field_pdf, field.value_region)
+            ext_mode = field.extraction_mode or "word"
+            resolved_reg, value = resolve_extraction_region(field_pdf, field.value_region, ext_mode)
             all_values[field.label] = value
             extracted.append({
                 "field": field,
@@ -609,13 +614,29 @@ def extract_all_fields(
                 "anchors_found": {},
                 "step_traces": [],
                 "uses_chain": False,
+                "resolved_region": resolved_reg if ext_mode != "strict" else None,
             })
         else:
             resolved = resolve_dynamic_field(field_pdf, field)
-            all_values[field.label] = resolved["value"]
+            value = resolved["value"]
+            resolved_reg = None
+            ext_mode = field.extraction_mode or "word"
+            # Apply extraction mode to the shifted value region
+            if ext_mode != "strict" and value:
+                dx = resolved.get("anchor_dx") or 0.0
+                dy = resolved.get("anchor_dy") or 0.0
+                shifted_region = Region(
+                    page=field.value_region.page,
+                    x=max(0, min(1 - field.value_region.width, field.value_region.x + dx)),
+                    y=max(0, min(1 - field.value_region.height, field.value_region.y + dy)),
+                    width=field.value_region.width,
+                    height=field.value_region.height,
+                )
+                resolved_reg, value = resolve_extraction_region(field_pdf, shifted_region, ext_mode)
+            all_values[field.label] = value
             extracted.append({
                 "field": field,
-                "value": resolved["value"],
+                "value": value,
                 "base_status": resolved["status"],
                 "expected_anchor": resolved["expected_anchor"],
                 "actual_anchor": resolved["actual_anchor"],
@@ -628,6 +649,7 @@ def extract_all_fields(
                 "anchors_found": {},
                 "step_traces": [],
                 "uses_chain": False,
+                "resolved_region": resolved_reg,
             })
 
     # --- Pass 2: Validate rules / cross-field chain validation ---
@@ -679,6 +701,7 @@ def extract_all_fields(
             anchors_found=entry.get("anchors_found", {}),
             table_data=entry.get("table_data"),
             resolved_table_height=entry.get("resolved_table_height"),
+            resolved_region=entry.get("resolved_region"),
             rule_results=rule_results,
             step_traces=step_traces,
             detected_datatype=detect_datatype(value),

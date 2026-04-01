@@ -2,7 +2,7 @@ import { useCallback, useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import { useBboxDrawing } from '../hooks/useBboxDrawing';
 import { normalizedToPixel, pixelToNormalized } from '../utils/coords';
-import { detectFormat } from '../api/client';
+import { detectFormat, getPageWords, type WordInfo } from '../api/client';
 import type { Field, FieldResult, Region, TableColumn } from '../types';
 
 interface DragState {
@@ -82,12 +82,38 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
   const tableWizard = useAppStore((s) => s.tableWizard);
   const completeTableBounds = useAppStore((s) => s.completeTableBounds);
   const addTableDivider = useAppStore((s) => s.addTableDivider);
+  const drawTool = useAppStore((s) => s.drawTool);
+  const pageWordsCache = useAppStore((s) => s.pageWordsCache);
+  const setPageWords = useAppStore((s) => s.setPageWords);
 
   // Drag state for moving existing boxes
   const [drag, setDrag] = useState<DragState | null>(null);
   const [dragPreview, setDragPreview] = useState<{ x: number; y: number } | null>(null);
   const dragStartedRef = useRef(false);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  // Pointer tool state
+  const [pointerSelection, setPointerSelection] = useState<{
+    words: WordInfo[];
+    region: { x: number; y: number; width: number; height: number }; // normalized
+    startNormX: number; // normalized X where the click started
+  } | null>(null);
+  const pointerDraggingRef = useRef(false);
+  const allWordsRef = useRef<WordInfo[]>([]);
+
+  // Load words for current page when in pointer mode
+  useEffect(() => {
+    if (drawTool !== 'pointer' || !pdfId) return;
+    const cacheKey = `${pdfId}:${currentPage}`;
+    if (pageWordsCache[cacheKey]) {
+      allWordsRef.current = pageWordsCache[cacheKey];
+      return;
+    }
+    getPageWords(pdfId, currentPage).then((words) => {
+      setPageWords(cacheKey, words);
+      allWordsRef.current = words;
+    }).catch(() => {});
+  }, [drawTool, pdfId, currentPage, pageWordsCache, setPageWords]);
 
   // Escape key exits field edit mode or chain edit mode
   useEffect(() => {
@@ -120,6 +146,138 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
 
   // Whether field drawing/editing is allowed (set by TemplatePanel)
   const canEdit = useAppStore((s) => s.canDrawFields);
+
+  // Pointer tool: find the word at a normalized position
+  const findWordAt = useCallback((normX: number, normY: number): WordInfo | null => {
+    const words = allWordsRef.current;
+    for (const w of words) {
+      if (normX >= w.x && normX <= w.x + w.width && normY >= w.y && normY <= w.y + w.height) {
+        return w;
+      }
+    }
+    // Fuzzy: find closest word within a small tolerance
+    const tolerance = 0.01;
+    let best: WordInfo | null = null;
+    let bestDist = Infinity;
+    for (const w of words) {
+      const cx = w.x + w.width / 2;
+      const cy = w.y + w.height / 2;
+      const dx = Math.max(0, Math.abs(normX - cx) - w.width / 2);
+      const dy = Math.max(0, Math.abs(normY - cy) - w.height / 2);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < tolerance && dist < bestDist) {
+        bestDist = dist;
+        best = w;
+      }
+    }
+    return best;
+  }, []);
+
+  // Pointer tool: compute bounding box of selected words with padding
+  const computeWordRegion = useCallback((words: WordInfo[]): { x: number; y: number; width: number; height: number } => {
+    const PAD = 0.003; // small padding around word(s)
+    const minX = Math.max(0, Math.min(...words.map((w) => w.x)) - PAD);
+    const minY = Math.max(0, Math.min(...words.map((w) => w.y)) - PAD);
+    const maxX = Math.min(1, Math.max(...words.map((w) => w.x + w.width)) + PAD);
+    const maxY = Math.min(1, Math.max(...words.map((w) => w.y + w.height)) + PAD);
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }, []);
+
+  // Pointer tool: find words that overlap the horizontal span from startX to endX on the same line
+  const findWordsInSpan = useCallback((clickedWord: WordInfo, startNormX: number, currentNormX: number): WordInfo[] => {
+    const words = allWordsRef.current;
+    const lineY = clickedWord.y;
+    const lineH = clickedWord.height;
+    // Words on the same line (vertical overlap)
+    const lineWords = words.filter((w) => {
+      const overlapTop = Math.max(w.y, lineY);
+      const overlapBot = Math.min(w.y + w.height, lineY + lineH);
+      return overlapBot - overlapTop > lineH * 0.3;
+    });
+    // Determine horizontal range
+    const minX = Math.min(startNormX, currentNormX);
+    const maxX = Math.max(startNormX, currentNormX);
+    // Words whose horizontal center falls within the range
+    const selected = lineWords.filter((w) => {
+      const wcx = w.x + w.width / 2;
+      return wcx >= minX && wcx <= maxX;
+    });
+    // Always include the clicked word
+    if (selected.length === 0) return [clickedWord];
+    return selected;
+  }, []);
+
+  // Handle pointer tool completion: create field from selected region
+  const handlePointerComplete = useCallback(async (region: { x: number; y: number; width: number; height: number }) => {
+    if (!canEdit) return;
+    const normRegion: Region = { page: currentPage, ...region };
+
+    // If anchor/table wizard or drawing region for step, delegate to onDrawComplete path
+    if (tableWizard && tableWizard.phase === 'bounds') {
+      completeTableBounds(normRegion);
+      return;
+    }
+    if (anchorWizard && pdfId) {
+      try {
+        const { extractRegion } = await import('../api/client');
+        const text = await extractRegion(pdfId, normRegion);
+        if (!text?.trim()) {
+          window.alert('No text found in the drawn region. Try drawing over visible text.');
+          return;
+        }
+        completeAnchorWizardStep(normRegion, text.trim());
+      } catch {
+        window.alert('Failed to extract text from region.');
+      }
+      return;
+    }
+    if (drawingRegionForStepId) {
+      updateChainStep(drawingRegionForStepId.fieldId, drawingRegionForStepId.stepId, { search_region: normRegion });
+      setDrawingRegionForStepId(null);
+      return;
+    }
+
+    if (drawMode === 'static') {
+      const label = window.prompt('Enter a label for this field:');
+      if (!label?.trim()) return;
+      addField({ id: crypto.randomUUID(), label: label.trim(), type: 'static', anchor_mode: 'static', anchors: [], value_region: normRegion, rules: [], chain: [] });
+    } else if (!pendingAnchor) {
+      const expectedText = window.prompt('What text should this anchor contain?');
+      if (!expectedText?.trim()) return;
+      setPendingAnchor({ region: normRegion, expectedText: expectedText.trim() });
+    } else {
+      const label = window.prompt('Enter a label for this field:');
+      if (!label?.trim()) return;
+      let detectedFormat: Field['value_format'] = undefined;
+      if (pdfId) {
+        try {
+          const { format } = await detectFormat(pdfId, normRegion);
+          detectedFormat = format as Field['value_format'];
+        } catch { /* silently continue */ }
+      }
+      const defaultChain = [
+        { id: crypto.randomUUID(), category: 'search' as const, type: 'exact_position' },
+        { id: crypto.randomUUID(), category: 'search' as const, type: 'vertical_slide', slide_tolerance: 0.3 },
+        { id: crypto.randomUUID(), category: 'search' as const, type: 'full_page_search' },
+        { id: crypto.randomUUID(), category: 'value' as const, type: 'offset_value' },
+        { id: crypto.randomUUID(), category: 'value' as const, type: 'adjacent_scan', search_direction: 'right' },
+      ];
+      addField({
+        id: crypto.randomUUID(),
+        label: label.trim(),
+        type: 'dynamic',
+        anchor_mode: 'single',
+        anchors: [{ id: crypto.randomUUID(), role: 'primary', region: pendingAnchor.region, expected_text: pendingAnchor.expectedText }],
+        value_region: normRegion,
+        anchor_region: pendingAnchor.region,
+        expected_anchor_text: pendingAnchor.expectedText,
+        rules: [],
+        value_format: detectedFormat,
+        chain: defaultChain,
+      });
+      setPendingAnchor(null);
+    }
+  }, [canEdit, currentPage, drawMode, pendingAnchor, setPendingAnchor, pdfId, addField, tableWizard, completeTableBounds, anchorWizard, completeAnchorWizardStep, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId]);
 
   const currentPageFields = fields.filter(
     (f) => {
@@ -271,10 +429,33 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
       const my = (e.clientY - rect.top) * scaleY;
       setDragPreview({ x: mx - drag.startMouseX, y: my - drag.startMouseY });
     }
+    // Pointer tool: expand selection while dragging
+    if (pointerDraggingRef.current && pointerSelection) {
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const scaleX = svg.clientWidth / rect.width;
+      const mx = (e.clientX - rect.left) * scaleX;
+      const normX = mx / pageWidth;
+      // Find the clicked word (first word in the initial selection)
+      const clickedWord = pointerSelection.words[0];
+      if (clickedWord) {
+        const selected = findWordsInSpan(clickedWord, pointerSelection.startNormX, normX);
+        const region = computeWordRegion(selected);
+        setPointerSelection({ words: selected, region, startNormX: pointerSelection.startNormX });
+      }
+    }
     handlers.onMouseMove(e);
-  }, [drag, handlers]);
+  }, [drag, handlers, pointerSelection, findWordsInSpan, computeWordRegion, pageWidth]);
 
   const onSvgMouseUp = useCallback(() => {
+    // Pointer tool: complete selection
+    if (pointerDraggingRef.current && pointerSelection) {
+      pointerDraggingRef.current = false;
+      const region = pointerSelection.region;
+      setPointerSelection(null);
+      handlePointerComplete(region);
+      return;
+    }
     if (drag && dragPreview) {
       const dxNorm = dragPreview.x / pageWidth;
       const dyNorm = dragPreview.y / pageHeight;
@@ -298,7 +479,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
       return;
     }
     handlers.onMouseUp();
-  }, [drag, dragPreview, pageWidth, pageHeight, updateFieldRegion, handlers]);
+  }, [drag, dragPreview, pageWidth, pageHeight, updateFieldRegion, handlers, pointerSelection, handlePointerComplete]);
 
   const onSvgMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (dragStartedRef.current) {
@@ -324,16 +505,45 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
       }
       return;
     }
+
+    // Pointer tool: find word at click position
+    const isPointerMode = drawTool === 'pointer' && canEdit && !drag
+      && !anchorWizard && !(tableWizard && tableWizard.phase === 'bounds')
+      && !drawingRegionForStepId;
+    if (isPointerMode) {
+      const svg = svgRef.current;
+      if (svg) {
+        const rect = svg.getBoundingClientRect();
+        const scaleX = svg.clientWidth / rect.width;
+        const scaleY = svg.clientHeight / rect.height;
+        const mx = (e.clientX - rect.left) * scaleX;
+        const my = (e.clientY - rect.top) * scaleY;
+        const normX = mx / pageWidth;
+        const normY = my / pageHeight;
+        const word = findWordAt(normX, normY);
+        if (word) {
+          const region = computeWordRegion([word]);
+          setPointerSelection({ words: [word], region, startNormX: normX });
+          pointerDraggingRef.current = true;
+          return;
+        }
+      }
+      // No word found at click — don't start drawing in pointer mode
+      return;
+    }
+
     if (!drag && canEdit) handlers.onMouseDown(e);
-  }, [drag, handlers, editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId, tableWizard, addTableDivider, pageWidth]);
+  }, [drag, handlers, editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId, tableWizard, addTableDivider, pageWidth, pageHeight, drawTool, canEdit, findWordAt, computeWordRegion, anchorWizard, drawingRegionForStepId]);
   const previewColor = drawingRegionForStepId
     ? { fill: 'rgba(245,158,11,0.1)', stroke: 'rgb(245,158,11)' }
     : drawMode === 'dynamic' && !pendingAnchor
       ? { fill: 'rgba(245,158,11,0.15)', stroke: 'rgb(245,158,11)' }
       : { fill: 'rgba(59,130,246,0.15)', stroke: 'rgb(59,130,246)' };
 
+  const svgCursor = drag ? 'grabbing' : !canEdit ? 'default' : drawTool === 'pointer' ? 'default' : 'crosshair';
+
   return (
-    <svg ref={svgRef} className="absolute top-0 left-0 w-full h-full" style={{ cursor: drag ? 'grabbing' : canEdit ? 'crosshair' : 'default', zIndex: 10 }}
+    <svg ref={svgRef} className="absolute top-0 left-0 w-full h-full" style={{ cursor: svgCursor, zIndex: 10 }}
       onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp}>
       <defs>
         <style>{`
@@ -575,6 +785,18 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
         <rect x={currentRect.x} y={currentRect.y} width={currentRect.width} height={currentRect.height}
           fill={previewColor.fill} stroke={previewColor.stroke} strokeWidth={2} strokeDasharray="6 3" rx={2} />
       )}
+
+      {/* Pointer tool: selection preview */}
+      {pointerSelection && (() => {
+        const r = pointerSelection.region;
+        const pos = normalizedToPixel(r.x, r.y, pageWidth, pageHeight);
+        const dim = normalizedToPixel(r.width, r.height, pageWidth, pageHeight);
+        return (
+          <rect x={pos.x} y={pos.y} width={dim.x} height={dim.y}
+            fill={previewColor.fill} stroke={previewColor.stroke} strokeWidth={2} rx={2}
+            pointerEvents="none" />
+        );
+      })()}
     </svg>
   );
 }
@@ -1003,6 +1225,24 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
                 stroke={isDraggingValue ? 'rgb(99,102,241)' : isEditing ? 'rgb(99,102,241)' : valueColor.stroke}
                 strokeWidth={isDraggingValue ? 3 : isEditing ? 3 : hasResult ? 3 : 2}
                 strokeDasharray={isDraggingValue ? '4 2' : isEditing ? '6 3' : undefined} rx={2} />
+              {/* Resolved extraction region (expanded area) */}
+              {hasResult && result.resolved_region && result.resolved_region.page === currentPage && (() => {
+                const rr = result.resolved_region;
+                const rrPos = normalizedToPixel(rr.x, rr.y, pw, ph);
+                const rrDim = normalizedToPixel(rr.width, rr.height, pw, ph);
+                return (
+                  <rect
+                    x={rrPos.x} y={rrPos.y}
+                    width={rrDim.x} height={rrDim.y}
+                    fill="rgba(59,130,246,0.04)"
+                    stroke="rgb(59,130,246)"
+                    strokeWidth={1.5}
+                    strokeDasharray="6 3"
+                    rx={2}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                );
+              })()}
               {/* Label bar */}
               <rect x={drawVx} y={drawVy - 20}
                 width={labelBarWidth} height={20}

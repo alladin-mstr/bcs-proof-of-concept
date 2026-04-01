@@ -10,6 +10,7 @@ import {
   listTestRuns,
   extractRegion,
 } from '../api/client';
+import { MousePointer2, BoxSelect, Table2 } from 'lucide-react';
 import ComparisonFieldsPanel from './ComparisonFieldsPanel';
 import type { TableRow, Field, DataType, TableEndAnchorMode } from '../types';
 
@@ -24,10 +25,13 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
   const pdfIdB = useAppStore((s) => s.pdfIdB);
   const currentPage = useAppStore((s) => s.currentPage);
   const currentPageB = useAppStore((s) => s.currentPageB);
+  const pageCount = useAppStore((s) => s.pageCount);
+  const setCurrentPage = useAppStore((s) => s.setCurrentPage);
   const setExtractionResults = useAppStore((s) => s.setExtractionResults);
   const removeField = useAppStore((s) => s.removeField);
   const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
   const updateFieldDataType = useAppStore((s) => s.updateFieldDataType);
+  const updateFieldExtractionMode = useAppStore((s) => s.updateFieldExtractionMode);
   const editingFieldId = useAppStore((s) => s.editingFieldId);
   const setEditingFieldId = useAppStore((s) => s.setEditingFieldId);
   const templateMode = useAppStore((s) => s.templateMode);
@@ -36,6 +40,7 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
   const [saving, setSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [expandedFieldId, setExpandedFieldId] = useState<string | null>(null);
+  const [collapsedPages, setCollapsedPages] = useState<Set<number>>(new Set());
   const [isEditing, setIsEditing] = useState(false); // editing an existing template
   const [renamingFieldId, setRenamingFieldId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
@@ -49,6 +54,8 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
   const removeTableDivider = useAppStore((s) => s.removeTableDivider);
   const setTableKeyColumn = useAppStore((s) => s.setTableKeyColumn);
   const addField = useAppStore((s) => s.addField);
+  const drawTool = useAppStore((s) => s.drawTool);
+  const setDrawTool = useAppStore((s) => s.setDrawTool);
 
   // Table preview: fieldId → extracted table data
   const [tablePreviews, setTablePreviews] = useState<Record<string, TableRow[]>>({});
@@ -71,12 +78,15 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
     }
   }, [pdfId]);
 
-  const pageFields = fields.filter((f) => {
-    const page = (f.source ?? 'a') === 'b' ? currentPageB : currentPage;
-    return f.type === 'table'
-      ? f.table_config?.table_region.page === page
-      : f.value_region.page === page || (f.anchor_region && f.anchor_region.page === page);
-  });
+  // Group fields by page number
+  const fieldsByPage = fields.reduce<Record<number, typeof fields>>((acc, f) => {
+    const page = f.type === 'table'
+      ? f.table_config?.table_region.page ?? f.value_region.page
+      : f.value_region.page;
+    (acc[page] ??= []).push(f);
+    return acc;
+  }, {});
+  const sortedPages = Object.keys(fieldsByPage).map(Number).sort((a, b) => a - b);
 
   // Mode logic:
   // - Testing: activeTemplateId set + !isEditing
@@ -344,7 +354,7 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
             Fields
           </h2>
-          <span className="text-[10px] text-muted-foreground">{pageFields.length} / {fields.length} field{fields.length !== 1 ? 's' : ''}</span>
+          <span className="text-[10px] text-muted-foreground">{fields.length} field{fields.length !== 1 ? 's' : ''}</span>
         </div>
         {templateMode === 'comparison' && (
           <div className="flex mt-2 rounded-lg overflow-hidden border border-border">
@@ -514,18 +524,43 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
         </div>
       )}
 
-      {/* Add Table button */}
+      {/* Drawing tool switcher + Add Table */}
       {canEditFields && !tableWizard && (
         <div className="px-3 py-2 border-b border-border">
-          <button
-            onClick={() => {
-              const fieldId = crypto.randomUUID();
-              startTableWizard(fieldId);
-            }}
-            className="w-full py-1.5 text-[10px] font-medium text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors"
-          >
-            + Add Table Field
-          </button>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setDrawTool('pointer')}
+              className={`p-1.5 rounded-md border transition-colors ${
+                drawTool === 'pointer'
+                  ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700'
+                  : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+              }`}
+              title="Pointer — click on words to select"
+            >
+              <MousePointer2 size={14} />
+            </button>
+            <button
+              onClick={() => setDrawTool('draw')}
+              className={`p-1.5 rounded-md border transition-colors ${
+                drawTool === 'draw'
+                  ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700'
+                  : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+              }`}
+              title="Draw — drag to draw a box"
+            >
+              <BoxSelect size={14} />
+            </button>
+            <button
+              onClick={() => {
+                const fieldId = crypto.randomUUID();
+                startTableWizard(fieldId);
+              }}
+              className="p-1.5 rounded-md border transition-colors bg-muted text-muted-foreground border-border hover:bg-muted/80"
+              title="Table — add a table field"
+            >
+              <Table2 size={14} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -533,17 +568,46 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
       {templateMode === 'comparison' && comparisonTab === 'connections' ? (
         <ComparisonFieldsPanel />
       ) : (
-      <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-        {pageFields.length === 0 ? (
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {fields.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">
             {isTestingMode
-              ? 'No fields on this page.'
-              : fields.length === 0
-                ? 'No fields yet. Draw on the PDF to add fields.'
-                : 'No fields on this page.'}
+              ? 'No fields defined.'
+              : 'No fields yet. Draw on the PDF to add fields.'}
           </p>
         ) : (
-          pageFields.map((field, i) => (
+          sortedPages.map((pageNum) => {
+            const pageFieldList = fieldsByPage[pageNum];
+            const isCollapsed = collapsedPages.has(pageNum);
+            const isCurrentPage = pageNum === currentPage;
+            return (
+              <div key={`page-${pageNum}`}>
+                <button
+                  onClick={() => {
+                    setCollapsedPages((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(pageNum)) next.delete(pageNum); else next.add(pageNum);
+                      return next;
+                    });
+                  }}
+                  className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide rounded transition-colors mb-1 ${
+                    isCurrentPage
+                      ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/20'
+                      : 'text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M6 4l4 4-4 4" />
+                  </svg>
+                  <span
+                    className="cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); setCurrentPage(pageNum); }}
+                  >
+                    Page {pageNum}
+                  </span>
+                  <span className="text-[9px] font-normal opacity-60">({pageFieldList.length})</span>
+                </button>
+                {!isCollapsed && <div className="space-y-2">{pageFieldList.map((field, i) => (
             <div
               key={field.id}
               className={`group/field rounded-lg text-xs transition-colors cursor-pointer ${
@@ -553,7 +617,11 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
                     ? 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800'
                     : 'bg-muted border border-border'
               }`}
-              onClick={() => setExpandedFieldId(expandedFieldId === field.id ? null : field.id)}
+              onClick={() => {
+                setExpandedFieldId(expandedFieldId === field.id ? null : field.id);
+                const fieldPage = field.type === 'table' ? field.table_config?.table_region.page ?? field.value_region.page : field.value_region.page;
+                if (fieldPage !== currentPage) setCurrentPage(fieldPage);
+              }}
             >
               <div className="flex items-center justify-between px-3 py-2">
                 <div className="flex-1 min-w-0">
@@ -797,10 +865,29 @@ export default function TemplatePanel({ embedded = false }: { embedded?: boolean
                       </select>
                     </div>
                   )}
+                  {field.type !== 'table' && (
+                    <div className="mt-1.5">
+                      <label className="text-[10px] font-semibold text-muted-foreground block mb-0.5">Extraction Mode</label>
+                      <select
+                        value={field.extraction_mode || 'word'}
+                        onChange={(e) => updateFieldExtractionMode(field.id, e.target.value as import('../types').ExtractionMode)}
+                        className="w-full text-xs bg-background border border-border rounded px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      >
+                        <option value="strict">Strict (exact box)</option>
+                        <option value="word">Word</option>
+                        <option value="line">Line</option>
+                        <option value="edge">Edge of page</option>
+                        <option value="paragraph">Paragraph</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          ))
+          ))}</div>}
+              </div>
+            );
+          })
         )}
       </div>
       )}

@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from models.schemas import Region
-from services.pdf_service import extract_text_from_region, get_page_count, detect_value_format
+from services.pdf_service import extract_text_from_region, resolve_extraction_region, get_page_count, detect_value_format, get_page_words
 from services.storage_backend import get_storage
 
 router = APIRouter(prefix="/pdfs", tags=["pdfs"])
@@ -90,13 +90,27 @@ async def get_pdf(pdf_id: str):
 
 
 @router.post("/{pdf_id}/extract-region")
-async def extract_region(pdf_id: str, region: Region):
+async def extract_region(pdf_id: str, region: Region, extraction_mode: str = "strict"):
     storage = get_storage()
     if not storage.pdf_exists(pdf_id):
         raise HTTPException(status_code=404, detail="PDF not found.")
     with storage.pdf_temp_path(pdf_id) as path:
-        text = extract_text_from_region(path, region)
-    return {"text": text}
+        resolved_region, text = resolve_extraction_region(path, region, extraction_mode)
+    result: dict = {"text": text}
+    if extraction_mode != "strict":
+        result["resolved_region"] = resolved_region.model_dump()
+    return result
+
+
+@router.get("/{pdf_id}/words")
+async def get_words(pdf_id: str, page: int = 1):
+    """Return word-level bounding boxes for a PDF page (normalized 0-1 coords)."""
+    storage = get_storage()
+    if not storage.pdf_exists(pdf_id):
+        raise HTTPException(status_code=404, detail="PDF not found.")
+    with storage.pdf_temp_path(pdf_id) as path:
+        words = get_page_words(path, page)
+    return {"page": page, "words": words}
 
 
 @router.post("/{pdf_id}/detect-format")

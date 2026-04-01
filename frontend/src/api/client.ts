@@ -105,6 +105,20 @@ export async function getPageLayout(pdfId: string, page: number, lineMargin: num
   return response.data.blocks;
 }
 
+// Get word-level bounding boxes for a PDF page
+export interface WordInfo {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export async function getPageWords(pdfId: string, page: number): Promise<WordInfo[]> {
+  const response = await api.get(`/pdfs/${pdfId}/words`, { params: { page } });
+  return response.data.words;
+}
+
 // Test extraction with current fields (no saved template needed)
 export async function testExtraction(
   pdfId: string,

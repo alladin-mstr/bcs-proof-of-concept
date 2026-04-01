@@ -208,6 +208,9 @@ class TableConfig(BaseModel):
     end_anchor_text: str | None = None  # Text that marks end of table (when mode = "text")
 
 
+ExtractionMode = Literal["strict", "word", "line", "edge", "paragraph"]
+
+
 class Field(BaseModel):
     """A labeled extraction field in a template."""
     id: str
@@ -221,6 +224,7 @@ class Field(BaseModel):
     rules: list[Rule] = []                  # Legacy field-level rules (kept for backward compat)
     value_format: DataType | None = None
     detected_datatype: DataType | None = None  # Auto-detected datatype after extraction
+    extraction_mode: ExtractionMode = "word"
     chain: list[ChainStep] = []
     source: Literal["a", "b"] = "a"
     table_config: TableConfig | None = None
@@ -282,6 +286,7 @@ class FieldResult(BaseModel):
     anchors_found: dict[str, dict] = {}
     table_data: list[dict] | None = None
     resolved_table_height: float | None = None  # Actual table height after end-anchor resolution
+    resolved_region: Region | None = None  # Expanded region after applying extraction_mode
     rule_results: list[RuleResult] = []
     step_traces: list[StepTrace] = []
     detected_datatype: DataType | None = None  # Auto-detected datatype

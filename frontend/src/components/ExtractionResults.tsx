@@ -134,7 +134,7 @@ function FieldResultCards({ results, templateMode }: { results: FieldResult[]; t
             )}
             <StatusBadge status={r.status} />
           </div>
-          <div className="text-[11px] font-mono text-foreground/70 bg-background/60 rounded px-2 py-1 truncate">
+          <div className="text-[11px] font-mono text-foreground/70 bg-background/60 rounded px-2 py-1 whitespace-pre-wrap break-all">
             {r.value || <span className="text-muted-foreground italic">empty</span>}
           </div>
 

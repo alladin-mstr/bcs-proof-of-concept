@@ -14,6 +14,7 @@ export type CompareOperator =
   | "is_empty" | "is_not_empty"
   | "date_before" | "date_after" | "date_between";
 export type DataType = "string" | "number" | "integer" | "date" | "currency";
+export type ExtractionMode = "strict" | "word" | "line" | "edge" | "paragraph";
 export type MathOperation = "add" | "subtract" | "multiply" | "divide"
   | "modulo" | "abs" | "round" | "min" | "max" | "sum" | "average";
 export type AggregateOperation = "sum" | "average" | "count" | "min" | "max";
@@ -217,6 +218,7 @@ export interface Field {
   rules: Rule[];                            // Legacy field-level rules (backward compat)
   value_format?: DataType;
   detected_datatype?: DataType;
+  extraction_mode?: ExtractionMode;
   chain: ChainStep[];
   source?: "a" | "b";
   table_config?: TableConfig;
@@ -258,6 +260,7 @@ export interface FieldResult {
   anchors_found?: Record<string, { x: number; y: number; text: string; width: number; height: number }>;
   table_data?: TableRow[];
   resolved_table_height?: number;
+  resolved_region?: Region;
   rule_results: RuleResult[];
   step_traces: StepTrace[];
   detected_datatype?: DataType;
