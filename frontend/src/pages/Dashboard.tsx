@@ -15,10 +15,9 @@ import { useTaskContext } from "@/context/TaskContext";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { getAllControlRuns, getAllClients, currentUser, currentTeam } = useTaskContext();
+  const { getAllControlRuns, currentUser } = useTaskContext();
 
   const allRuns = getAllControlRuns();
-  const allClients = getAllClients();
 
   // Fixed demo stats from mega-prompt
   const controlesThisMonth = 47;
