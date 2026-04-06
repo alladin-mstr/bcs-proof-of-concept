@@ -49,7 +49,9 @@ export default function ControleWizard() {
         });
     } else {
       const nameFromParams = searchParams.get("naam") ?? "";
-      initWizard(undefined, nameFromParams);
+      const klantId = searchParams.get("klantId") ?? undefined;
+      const klantName = searchParams.get("klantName") ?? undefined;
+      initWizard(undefined, nameFromParams, klantId, klantName);
     }
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
