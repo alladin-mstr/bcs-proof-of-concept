@@ -178,7 +178,7 @@ interface AppState {
   wizardActiveTab: WizardTab;
   wizardSwapping: boolean;
 
-  initWizard: (controle?: Controle, name?: string) => void;
+  initWizard: (controle?: Controle, name?: string, klantId?: string, klantName?: string) => void;
   setWizardTab: (tab: WizardTab) => void;
   setWizardName: (name: string) => void;
   addWizardFile: (file: ControleFile) => void;
@@ -721,7 +721,7 @@ export const useAppStore = create<AppState>((set) => ({
   wizardActiveTab: "bestanden",
   wizardSwapping: false,
 
-  initWizard: (controle, name) => {
+  initWizard: (controle, name, klantId, klantName) => {
     if (controle) {
       set({
         wizardControle: controle,
@@ -743,6 +743,8 @@ export const useAppStore = create<AppState>((set) => ({
           rules: [],
           computedFields: [],
           ruleGraph: null,
+          klantId: klantId ?? null,
+          klantName: klantName ?? null,
           createdAt: now,
           updatedAt: now,
         },
