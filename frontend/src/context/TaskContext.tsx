@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Template, Client, ControlRun, Team, TaskResult, Deviation, TaskType, TranslationRule } from '@/types/task';
+import { Template, ControlRun, Team, TaskResult, Deviation, TaskType, TranslationRule } from '@/types/task';
 import {
   defaultTeams,
   controleurs,
   sampleTemplates,
-  sampleClients,
   sampleControlRuns,
   translationRules,
 } from '@/data/demo-data';
@@ -25,18 +24,9 @@ interface TaskContextType {
   getSharedTemplates: () => Template[];
   getAllTemplates: () => Template[];
   
-  // Clients
-  clients: Client[];
-  addClient: (name: string) => Client;
-  deleteClient: (id: string) => void;
-  getTeamClients: () => Client[];
-  getAllClients: () => Client[];
-  getClientById: (id: string) => Client | undefined;
-  
   // Control runs
   controlRuns: ControlRun[];
   runControl: (templateId: string, clientId: string) => Promise<TaskResult>;
-  getClientControlRuns: (clientId: string) => ControlRun[];
   getTeamControlRuns: () => ControlRun[];
   getAllControlRuns: () => ControlRun[];
   getControlRunById: (id: string) => ControlRun | undefined;
@@ -58,7 +48,6 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const [teams] = useState<Team[]>(defaultTeams);
   const [currentTeamId, setCurrentTeamId] = useState<string>('polaris');
   const [templates, setTemplates] = useState<Template[]>(sampleTemplates);
-  const [clients, setClients] = useState<Client[]>(sampleClients);
   const [controlRuns, setControlRuns] = useState<ControlRun[]>(sampleControlRuns);
   const [rules] = useState<TranslationRule[]>(translationRules);
   const [currentResult, setCurrentResult] = useState<TaskResult | null>(null);
@@ -90,45 +79,20 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     setTemplates(prev => prev.filter(t => t.id !== id));
   };
 
-  // Clients
-  const getTeamClients = () => clients.filter(c => c.teamId === currentTeamId);
-  const getAllClients = () => clients;
-  const getClientById = (id: string) => clients.find(c => c.id === id);
-
-  const addClient = (name: string): Client => {
-    const newClient: Client = {
-      id: `client-${Date.now()}`,
-      name,
-      createdAt: new Date(),
-      teamId: currentTeamId,
-    };
-    setClients(prev => [...prev, newClient]);
-    return newClient;
-  };
-
-  const deleteClient = (id: string) => {
-    setClients(prev => prev.filter(c => c.id !== id));
-  };
-
   // Control runs
   const getTeamControlRuns = () => controlRuns
     .filter(r => r.teamId === currentTeamId)
     .sort((a, b) => new Date(b.runAt).getTime() - new Date(a.runAt).getTime());
   const getAllControlRuns = () => controlRuns
     .sort((a, b) => new Date(b.runAt).getTime() - new Date(a.runAt).getTime());
-  const getClientControlRuns = (clientId: string) => 
-    controlRuns.filter(r => r.clientId === clientId).sort((a, b) => 
-      new Date(b.runAt).getTime() - new Date(a.runAt).getTime()
-    );
   const getControlRunById = (id: string) => controlRuns.find(r => r.id === id);
 
   const runControl = async (templateId: string, clientId: string): Promise<TaskResult> => {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     const template = templates.find(t => t.id === templateId);
-    const client = clients.find(c => c.id === clientId);
-    
-    if (!template || !client) throw new Error('Template or client not found');
+
+    if (!template) throw new Error('Template not found');
 
     const totalRows = Math.floor(Math.random() * 100) + 30;
     const deviationCount = Math.floor(Math.random() * 5);
@@ -155,7 +119,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       templateId,
       templateName: template.name,
       clientId,
-      clientName: client.name,
+      clientName: '',
       controleurId: teamControleur?.id,
       controleurName: teamControleur?.name || currentUser,
       runAt: new Date(),
@@ -172,7 +136,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     const result: TaskResult = {
       taskId: newRun.id,
       taskName: template.name,
-      clientName: client.name,
+      clientName: '',
       runAt: newRun.runAt,
       totalRows: newRun.totalRows,
       deviations: newRun.deviations,
@@ -196,15 +160,8 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       getTeamTemplates,
       getSharedTemplates,
       getAllTemplates,
-      clients,
-      addClient,
-      deleteClient,
-      getTeamClients,
-      getAllClients,
-      getClientById,
       controlRuns,
       runControl,
-      getClientControlRuns,
       getTeamControlRuns,
       getAllControlRuns,
       getControlRunById,
