@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { HeaderAction } from "@/context/HeaderActionContext";
 import { Search, Plus, FolderOpen, ChevronRight, CheckCircle, AlertTriangle, Users } from "lucide-react";
@@ -30,31 +30,37 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { useTaskContext } from "@/context/TaskContext";
+import { listKlanten, createKlant, deleteKlant as deleteKlantApi, listControleRuns } from "@/api/client";
+import type { Klant, ControleRunResult } from "@/types";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Clients() {
   const navigate = useNavigate();
-  const { getAllClients, getClientControlRuns, addClient, teams } = useTaskContext();
+  const { toast } = useToast();
+  const [klanten, setKlanten] = useState<Klant[]>([]);
+  const [runs, setRuns] = useState<ControleRunResult[]>([]);
+  const [newMedewerkerCount, setNewMedewerkerCount] = useState<string>("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [newClientName, setNewClientName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const clients = getAllClients();
+  useEffect(() => {
+    listKlanten().then(setKlanten).catch(() => {});
+    listControleRuns().then(setRuns).catch(() => {});
+  }, []);
 
-  const clientsWithStats = clients.map(client => {
-    const runs = getClientControlRuns(client.id);
-    const lastRun = runs[0];
-    const totalRuns = runs.length;
-    const openBevindingen = runs.reduce((sum, r) => sum + (r.bevindingen ?? r.deviations.length), 0);
-    const team = teams.find(t => t.id === client.teamId);
+  const clientsWithStats = klanten.map(client => {
+    const clientRuns = runs.filter(r => r.klantId === client.id);
+    const lastRun = clientRuns[0];
+    const totalRuns = clientRuns.length;
+    const openBevindingen = clientRuns.filter(r => r.status !== "success").length;
 
     return {
       ...client,
       lastRun,
       totalRuns,
       openBevindingen,
-      teamName: team?.name || '',
     };
   });
 
@@ -69,15 +75,24 @@ export default function Clients() {
       return a.name.localeCompare(b.name);
     });
 
-  const handleAddClient = () => {
+  const handleAddClient = async () => {
     if (newClientName.trim()) {
-      addClient(newClientName.trim());
-      setNewClientName("");
-      setDialogOpen(false);
+      try {
+        const klant = await createKlant({
+          name: newClientName.trim(),
+          medewerkerCount: newMedewerkerCount ? parseInt(newMedewerkerCount, 10) : undefined,
+        });
+        setKlanten(prev => [klant, ...prev]);
+        setNewClientName("");
+        setNewMedewerkerCount("");
+        setDialogOpen(false);
+      } catch {
+        toast({ title: "Toevoegen mislukt", variant: "destructive" });
+      }
     }
   };
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
@@ -105,6 +120,16 @@ export default function Clients() {
                 value={newClientName}
                 onChange={(e) => setNewClientName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddClient()}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="client-medewerkers">Aantal medewerkers</Label>
+              <Input
+                id="client-medewerkers"
+                type="number"
+                placeholder="Bijv. 25"
+                value={newMedewerkerCount}
+                onChange={(e) => setNewMedewerkerCount(e.target.value)}
               />
             </div>
           </div>
@@ -144,7 +169,6 @@ export default function Clients() {
             <TableHeader>
               <TableRow>
                 <TableHead>Klant</TableHead>
-                <TableHead>Team</TableHead>
                 <TableHead>Medewerkers</TableHead>
                 <TableHead>Laatste controle</TableHead>
                 <TableHead className="text-right">Open bevindingen</TableHead>
@@ -169,9 +193,6 @@ export default function Clients() {
                         )}
                       </div>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">{client.teamName}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {client.medewerkerCount || '—'}
