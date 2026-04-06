@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { getControle, deleteControle } from "@/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { HeaderAction } from "@/context/HeaderActionContext";
@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Play, Trash2, FileText, Hash, GitBranch } from "lucide-react";
+import { Pencil, Play, Trash2, FileText, Hash, GitBranch, Users } from "lucide-react";
 import type { Controle } from "@/types";
 
 export default function ControleDetail() {
@@ -125,45 +125,54 @@ export default function ControleDetail() {
       </HeaderAction>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Status</div>
-            <div className="mt-1">
-              {controle.status === "published" ? (
-                <Badge variant="outline" className="text-success border-success/30 bg-success/10">
-                  Gepubliceerd
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
-                  Concept
-                </Badge>
-              )}
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {controle.status === "published" ? (
+              <Badge variant="outline" className="text-success border-success/30 bg-success/10">
+                Gepubliceerd
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
+                Concept
+              </Badge>
+            )}
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <FileText className="h-3.5 w-3.5" /> Bestanden
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Bestanden</CardTitle>
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <FileText className="h-5 w-5 text-primary" />
             </div>
-            <div className="mt-1 text-2xl font-semibold">{controle.files.length}</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold text-foreground">{controle.files.length}</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Hash className="h-3.5 w-3.5" /> Velden
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Velden</CardTitle>
+            <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center">
+              <Hash className="h-5 w-5 text-success" />
             </div>
-            <div className="mt-1 text-2xl font-semibold">{totalFields}</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold text-foreground">{totalFields}</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <GitBranch className="h-3.5 w-3.5" /> Regels
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Regels</CardTitle>
+            <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center">
+              <GitBranch className="h-5 w-5 text-warning" />
             </div>
-            <div className="mt-1 text-2xl font-semibold">{controle.rules.length}</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold text-foreground">{controle.rules.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -174,10 +183,24 @@ export default function ControleDetail() {
         <span>Laatst gewijzigd: {formatDate(controle.updatedAt)}</span>
       </div>
 
+      {/* Klant */}
+      {controle.klantName && (
+        <div className="flex items-center gap-2 text-sm">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <span className="text-muted-foreground">Klant:</span>
+          <Link
+            to={`/klanten/${controle.klantId}`}
+            className="font-medium text-primary hover:underline"
+          >
+            {controle.klantName}
+          </Link>
+        </div>
+      )}
+
       {/* Files table */}
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Bestanden</CardTitle>
+          <CardTitle>Bestanden</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -202,8 +225,9 @@ export default function ControleDetail() {
               ))}
               {controle.files.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                    Geen bestanden
+                  <TableCell colSpan={4} className="text-center py-12">
+                    <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-muted-foreground">Geen bestanden</p>
                   </TableCell>
                 </TableRow>
               )}
@@ -212,63 +236,64 @@ export default function ControleDetail() {
         </CardContent>
       </Card>
 
-      {/* Rules table */}
-      {controle.rules.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Regels</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Naam</TableHead>
-                  <TableHead>Type</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {controle.rules.map((rule) => (
-                  <TableRow key={rule.id}>
-                    <TableCell className="font-medium">{rule.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{rule.type}</Badge>
-                    </TableCell>
+      {/* Rules & Computed fields side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {controle.rules.length > 0 && (
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle>Regels</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Naam</TableHead>
+                    <TableHead>Type</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {controle.rules.map((rule) => (
+                    <TableRow key={rule.id}>
+                      <TableCell className="font-medium">{rule.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{rule.type}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Computed fields */}
-      {controle.computedFields.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Berekende velden</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Formule</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {controle.computedFields.map((cf) => (
-                  <TableRow key={cf.id}>
-                    <TableCell className="font-medium">{cf.label}</TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {cf.formula}
-                    </TableCell>
+        {controle.computedFields.length > 0 && (
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle>Berekende velden</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Formule</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {controle.computedFields.map((cf) => (
+                    <TableRow key={cf.id}>
+                      <TableCell className="font-medium">{cf.label}</TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        {cf.formula}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
