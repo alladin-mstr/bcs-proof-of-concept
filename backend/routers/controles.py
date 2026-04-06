@@ -141,6 +141,8 @@ async def run_controle(controle_id: str, data: RunControleRequest):
         id=str(uuid.uuid4()),
         controleId=controle_id,
         controleName=controle.name,
+        klantId=controle.klantId,
+        klantName=controle.klantName,
         status=status,
         totalFields=total_fields,
         passedFields=passed_fields,
