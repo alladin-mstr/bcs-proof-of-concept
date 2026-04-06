@@ -1,17 +1,18 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Plus, CheckCircle, AlertTriangle, ChevronRight } from "lucide-react";
+import { Plus, CheckCircle, AlertTriangle, ChevronRight, FileText, Clock, Pencil, Play } from "lucide-react";
 import { HeaderAction } from "@/context/HeaderActionContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getKlant, listControleRuns } from "@/api/client";
-import type { Klant, ControleRunResult } from "@/types";
+import { getKlant, listControles, listControleRuns } from "@/api/client";
+import type { Klant, Controle, ControleRunResult } from "@/types";
 
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const [client, setClient] = useState<Klant | null>(null);
+  const [controles, setControles] = useState<Controle[]>([]);
   const [controlRuns, setControlRuns] = useState<ControleRunResult[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -19,10 +20,12 @@ export default function ClientDetail() {
     if (!clientId) return;
     Promise.all([
       getKlant(clientId),
+      listControles(),
       listControleRuns(),
     ])
-      .then(([klant, allRuns]) => {
+      .then(([klant, allControles, allRuns]) => {
         setClient(klant);
+        setControles(allControles.filter((c) => c.klantId === clientId));
         setControlRuns(allRuns.filter((r) => r.klantId === clientId));
       })
       .catch(() => setClient(null))
@@ -71,7 +74,10 @@ export default function ClientDetail() {
     });
   };
 
-  const getStatusBadge = (run: ControleRunResult) => {
+  const formatDate = (date: string) =>
+    new Date(date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const getRunStatusBadge = (run: ControleRunResult) => {
     if (run.status === 'success') {
       return (
         <Badge variant="outline" className="text-success border-success/30 bg-success/10 gap-1">
@@ -90,12 +96,6 @@ export default function ClientDetail() {
 
   return (
     <div className="space-y-6">
-      {/* Back button */}
-      <Button variant="ghost" size="sm" onClick={() => navigate('/klanten')} className="gap-2">
-        <ArrowLeft className="h-4 w-4" />
-        Terug
-      </Button>
-
       <HeaderAction>
         <Button
           className="rounded-full shadow-lg"
@@ -107,23 +107,66 @@ export default function ClientDetail() {
         </Button>
       </HeaderAction>
 
-      {/* Control History */}
+      {/* Controles for this klant */}
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle>Controles</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {controles.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p className="text-sm">Nog geen controles voor deze klant</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {controles.map((c) => {
+                const totalFields = c.files.reduce((sum, f) => sum + f.fields.length, 0);
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border"
+                    onClick={() => navigate(`/controle/${c.id}`)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <span className="font-medium">{c.name}</span>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                          <span>{c.files.length} bestanden</span>
+                          <span>{totalFields} velden</span>
+                          <span>{formatDate(c.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {c.status === "published" ? (
+                        <Badge variant="outline" className="text-success border-success/30 bg-success/10">
+                          Gepubliceerd
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
+                          Concept
+                        </Badge>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Control Run History */}
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle>Controlegeschiedenis</CardTitle>
         </CardHeader>
         <CardContent>
           {controlRuns.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg font-medium text-foreground">Nog geen controles uitgevoerd</p>
-              <p className="text-sm mt-1">Start je eerste controle voor deze klant</p>
-              <Button
-                className="mt-6 rounded-full"
-                onClick={() => navigate(`/controles?newForKlant=${client.id}`)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Nieuwe controle
-              </Button>
+            <div className="text-center py-8 text-muted-foreground">
+              <p className="text-sm">Nog geen controles uitgevoerd</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -146,7 +189,7 @@ export default function ClientDetail() {
                           <span className="font-medium">{run.controleName}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          {getStatusBadge(run)}
+                          {getRunStatusBadge(run)}
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </div>
                       </div>
