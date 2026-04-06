@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, CheckCircle, AlertTriangle, Clock, ListChecks, Plus, Play, Pencil, FileText, MoreHorizontal, Eye, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,9 +40,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { listControles, listControleRuns, deleteControle } from "@/api/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { listControles, listControleRuns, deleteControle, listKlanten } from "@/api/client";
 import { useToast } from "@/hooks/use-toast";
-import type { Controle, ControleRunResult } from "@/types";
+import type { Controle, ControleRunResult, Klant } from "@/types";
 
 export default function MyControls() {
   const navigate = useNavigate();
@@ -55,11 +62,28 @@ export default function MyControls() {
   const [deleting, setDeleting] = useState(false);
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newName, setNewName] = useState("");
+  const [klanten, setKlanten] = useState<Klant[]>([]);
+  const [selectedKlantId, setSelectedKlantId] = useState<string>("");
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     listControles().then(setControles).catch(() => {});
     listControleRuns().then(setRuns).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    listKlanten().then(setKlanten).catch(() => {});
+  }, []);
+
+  // Auto-open dialog when navigating from klant detail page
+  useEffect(() => {
+    const klantId = searchParams.get("newForKlant");
+    if (klantId) {
+      setSelectedKlantId(klantId);
+      setNewName("");
+      setShowNewDialog(true);
+    }
+  }, [searchParams]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -261,6 +285,7 @@ export default function MyControls() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Controle</TableHead>
+                  <TableHead>Klant</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Velden</TableHead>
                   <TableHead>Regels</TableHead>
@@ -272,15 +297,16 @@ export default function MyControls() {
                 {filteredRuns.map((run) => (
                   <TableRow key={run.id}>
                     <TableCell className="font-medium">{run.controleName}</TableCell>
+                    <TableCell className="text-muted-foreground">{run.klantName || "—"}</TableCell>
                     <TableCell>{getRunStatusBadge(run.status)}</TableCell>
                     <TableCell>
-                      <span className={run.failedFields > 0 ? "text-red-600" : "text-green-600"}>
+                      <span className={run.failedFields > 0 ? "text-destructive" : "text-success"}>
                         {run.passedFields}/{run.totalFields} OK
                       </span>
                     </TableCell>
                     <TableCell>
                       {run.rulesTotal > 0 ? (
-                        <span className={run.rulesPassed < run.rulesTotal ? "text-amber-600" : "text-green-600"}>
+                        <span className={run.rulesPassed < run.rulesTotal ? "text-warning" : "text-success"}>
                           {run.rulesPassed}/{run.rulesTotal}
                         </span>
                       ) : (
@@ -302,7 +328,7 @@ export default function MyControls() {
                 ))}
                 {filteredRuns.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12">
+                    <TableCell colSpan={7} className="text-center py-12">
                       <ListChecks className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                       <p className="text-muted-foreground">Nog geen resultaten</p>
                     </TableCell>
@@ -320,24 +346,35 @@ export default function MyControls() {
           <DialogHeader>
             <DialogTitle>Nieuwe controle</DialogTitle>
             <DialogDescription>
-              Geef een naam op voor de nieuwe controle.
+              Geef een naam op en selecteer een klant.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="controle-name">Naam</Label>
-            <Input
-              id="controle-name"
-              placeholder="Bijv. Jaarrekening controle 2025"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newName.trim()) {
-                  setShowNewDialog(false);
-                  navigate(`/controle/nieuw?naam=${encodeURIComponent(newName.trim())}`);
-                }
-              }}
-              autoFocus
-            />
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="controle-name">Naam</Label>
+              <Input
+                id="controle-name"
+                placeholder="Bijv. Jaarrekening controle 2025"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="controle-klant">Klant</Label>
+              <Select value={selectedKlantId} onValueChange={setSelectedKlantId}>
+                <SelectTrigger id="controle-klant">
+                  <SelectValue placeholder="Selecteer een klant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {klanten.map((k) => (
+                    <SelectItem key={k.id} value={k.id}>
+                      {k.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNewDialog(false)}>
@@ -346,8 +383,14 @@ export default function MyControls() {
             <Button
               disabled={!newName.trim()}
               onClick={() => {
+                const klant = klanten.find((k) => k.id === selectedKlantId);
+                const params = new URLSearchParams({ naam: newName.trim() });
+                if (klant) {
+                  params.set("klantId", klant.id);
+                  params.set("klantName", klant.name);
+                }
                 setShowNewDialog(false);
-                navigate(`/controle/nieuw?naam=${encodeURIComponent(newName.trim())}`);
+                navigate(`/controle/nieuw?${params.toString()}`);
               }}
             >
               Aanmaken
