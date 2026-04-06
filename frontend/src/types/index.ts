@@ -310,6 +310,14 @@ export interface ControleFile {
 
 export type ControleStatus = "draft" | "published";
 
+export interface Klant {
+  id: string;
+  name: string;
+  medewerkerCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Controle {
   id: string;
   name: string;
@@ -318,6 +326,8 @@ export interface Controle {
   rules: TemplateRule[];
   computedFields: ComputedField[];
   ruleGraph: { nodes: unknown[]; edges: unknown[] } | null;
+  klantId?: string;
+  klantName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -328,6 +338,8 @@ export interface ControleRunResult {
   id: string;
   controleId: string;
   controleName: string;
+  klantId?: string;
+  klantName?: string;
   status: "success" | "review" | "error";
   totalFields: number;
   passedFields: number;

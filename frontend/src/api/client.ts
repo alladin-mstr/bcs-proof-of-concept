@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, ComputedField, Controle, ControleRunResult } from "../types";
+import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, ComputedField, Controle, ControleRunResult, Klant } from "../types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
@@ -215,4 +215,35 @@ export async function runControle(
 export async function listControleRuns(): Promise<ControleRunResult[]> {
   const response = await api.get("/controles/runs/all");
   return response.data;
+}
+
+// --- Klanten ---
+
+export async function createKlant(
+  data: { name: string; medewerkerCount?: number },
+): Promise<Klant> {
+  const response = await api.post("/klanten", data);
+  return response.data;
+}
+
+export async function listKlanten(): Promise<Klant[]> {
+  const response = await api.get("/klanten");
+  return response.data;
+}
+
+export async function getKlant(id: string): Promise<Klant> {
+  const response = await api.get(`/klanten/${id}`);
+  return response.data;
+}
+
+export async function updateKlant(
+  id: string,
+  data: { name: string; medewerkerCount?: number },
+): Promise<Klant> {
+  const response = await api.put(`/klanten/${id}`, data);
+  return response.data;
+}
+
+export async function deleteKlant(id: string): Promise<void> {
+  await api.delete(`/klanten/${id}`);
 }
