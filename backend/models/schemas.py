@@ -343,11 +343,30 @@ class ControleFile(BaseModel):
     extractionResults: list[FieldResult] | None = None
 
 
+# --- Klant (customer) ---
+
+class KlantCreate(BaseModel):
+    """Request body to create or update a klant."""
+    name: str
+    medewerkerCount: int | None = None
+
+
+class Klant(BaseModel):
+    """A persisted klant (customer)."""
+    id: str
+    name: str
+    medewerkerCount: int | None = None
+    createdAt: datetime
+    updatedAt: datetime
+
+
 class ControleRunResult(BaseModel):
     """A persisted result of running a controle."""
     id: str
     controleId: str
     controleName: str
+    klantId: str | None = None
+    klantName: str | None = None
     status: Literal["success", "review", "error"]
     totalFields: int
     passedFields: int
@@ -367,6 +386,8 @@ class ControleCreate(BaseModel):
     rules: list[TemplateRule] = []
     computedFields: list[ComputedField] = []
     ruleGraph: dict | None = None
+    klantId: str | None = None
+    klantName: str | None = None
 
 
 class Controle(BaseModel):
@@ -378,5 +399,7 @@ class Controle(BaseModel):
     rules: list[TemplateRule] = []
     computedFields: list[ComputedField] = []
     ruleGraph: dict | None = None
+    klantId: str | None = None
+    klantName: str | None = None
     createdAt: datetime
     updatedAt: datetime
