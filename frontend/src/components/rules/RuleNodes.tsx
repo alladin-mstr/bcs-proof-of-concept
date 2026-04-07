@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, useCallback } from 'react';
-import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useReactFlow, useEdges, useNodes, type NodeProps } from '@xyflow/react';
 import { useAppStore } from '@/store/appStore';
 import type { RuleNodeData, DataType, MathOperation, CompareOperator, AggregateOperation, RowFilterMode } from '../../types';
 
@@ -588,7 +588,9 @@ function CustomScriptModal({
 /* ── Custom Script Node ── */
 
 export const CustomScriptNode = memo(({ id, data }: NodeProps & { data: RuleNodeData }) => {
-  const { getEdges, getNodes, setNodes } = useReactFlow();
+  const { setNodes } = useReactFlow();
+  const edges = useEdges();
+  const nodes = useNodes();
   const [showModal, setShowModal] = useState(false);
 
   const handleSave = useCallback((script: string) => {
@@ -601,8 +603,6 @@ export const CustomScriptNode = memo(({ id, data }: NodeProps & { data: RuleNode
 
   // Resolve input data from connected source
   const inputData = useMemo(() => {
-    const edges = getEdges();
-    const nodes = getNodes();
     const inEdge = edges.find((e) => e.target === id);
     const src = inEdge ? nodes.find((n) => n.id === inEdge.source) : undefined;
     if (!src) return { type: 'none' as const };
@@ -628,7 +628,7 @@ export const CustomScriptNode = memo(({ id, data }: NodeProps & { data: RuleNode
     }
 
     return { type: 'none' as const };
-  }, [id, getEdges, getNodes]);
+  }, [id, edges, nodes]);
 
   const scriptPreview = data.customScript
     ? data.customScript.split('\n').find((l) => l.trim() && !l.trim().startsWith('//'))?.trim().slice(0, 30) || 'script...'
