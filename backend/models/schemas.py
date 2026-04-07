@@ -407,6 +407,7 @@ class KlantCreate(BaseModel):
     """Request body to create or update a klant."""
     name: str
     medewerkerCount: int | None = None
+    parentId: str | None = None
 
 
 class Klant(BaseModel):
@@ -414,6 +415,8 @@ class Klant(BaseModel):
     id: str
     name: str
     medewerkerCount: int | None = None
+    parentId: str | None = None
+    sourceControlIds: dict[str, str] | None = None
     createdAt: datetime
     updatedAt: datetime
 
