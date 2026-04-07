@@ -403,3 +403,54 @@ class Controle(BaseModel):
     klantName: str | None = None
     createdAt: datetime
     updatedAt: datetime
+
+
+# --- Controle Series ---
+
+class ControleSeriesStep(BaseModel):
+    """A single step in a controle series."""
+    id: str
+    order: int
+    controleId: str
+    controleName: str
+    condition: Literal["always", "if_passed", "if_failed"] = "always"
+
+
+class ControleSeriesCreate(BaseModel):
+    """Request body to create or update a controle series."""
+    name: str
+    klantId: str
+    klantName: str
+    steps: list[ControleSeriesStep] = []
+
+
+class ControleSeries(BaseModel):
+    """A persisted controle series."""
+    id: str
+    name: str
+    klantId: str
+    klantName: str
+    steps: list[ControleSeriesStep] = []
+    createdAt: datetime
+    updatedAt: datetime
+
+
+class ControleSeriesStepResult(BaseModel):
+    """Result of a single step in a series run."""
+    stepId: str
+    controleId: str
+    controleName: str
+    status: Literal["passed", "failed", "skipped", "error"]
+    controleRunId: str | None = None
+
+
+class ControleSeriesRun(BaseModel):
+    """A persisted result of running a controle series."""
+    id: str
+    seriesId: str
+    seriesName: str
+    klantId: str
+    klantName: str
+    status: Literal["running", "completed", "stopped"]
+    stepResults: list[ControleSeriesStepResult] = []
+    runAt: datetime
