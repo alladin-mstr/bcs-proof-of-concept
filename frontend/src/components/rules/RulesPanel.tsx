@@ -176,15 +176,16 @@ export default function RulesPanel() {
   );
 
   // Sync field nodes — add new fields, remove deleted fields
+  // Note: nodes starting with 'field-ss-' are auto-imported spreadsheet columns, not from the fields array
   useEffect(() => {
     const existingFieldNodeIds = new Set(
-      ruleNodes.filter(n => n.id.startsWith('field-')).map(n => n.id)
+      ruleNodes.filter(n => n.id.startsWith('field-') && !n.id.startsWith('field-ss-')).map(n => n.id)
     );
     const currentFieldIds = new Set(fieldNodes.map(n => n.id));
 
     // Add missing field nodes
     const newFieldNodes = fieldNodes.filter(n => !existingFieldNodeIds.has(n.id));
-    // Remove stale field nodes
+    // Remove stale field nodes (but not spreadsheet column nodes)
     const stalIds = [...existingFieldNodeIds].filter(id => !currentFieldIds.has(id));
 
     if (newFieldNodes.length > 0 || stalIds.length > 0) {
@@ -702,7 +703,7 @@ export default function RulesPanel() {
       {showAddMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />
-          <div className="fixed right-auto top-auto z-50 w-72 bg-popover border border-border rounded-lg shadow-lg overflow-hidden" style={{ top: (document.querySelector('[data-add-node-btn]') as HTMLElement)?.getBoundingClientRect().bottom ?? 48, right: window.innerWidth - ((document.querySelector('[data-add-node-btn]') as HTMLElement)?.getBoundingClientRect().right ?? 0) }}>
+          <div className="fixed right-auto top-auto z-50 w-[28rem] bg-popover border border-border rounded-lg shadow-lg overflow-hidden" style={{ top: (document.querySelector('[data-add-node-btn]') as HTMLElement)?.getBoundingClientRect().bottom ?? 48, right: window.innerWidth - ((document.querySelector('[data-add-node-btn]') as HTMLElement)?.getBoundingClientRect().right ?? 0) }}>
             <div className="flex border-b border-border">
               {visibleCategories.map((cat) => (
                 <button
