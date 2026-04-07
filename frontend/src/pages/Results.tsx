@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Download, CheckCircle, AlertTriangle, XCircle, ChevronDown, ChevronRight, Pencil, BookOpen, ArrowLeftRight, SearchCheck, FileEdit, FileSpreadsheet, FileDown, Copy } from "lucide-react";
+import { ArrowLeft, Download, CheckCircle, AlertTriangle, XCircle, ChevronDown, ChevronRight, Pencil, BookOpen, ArrowLeftRight, SearchCheck, FileEdit, FileSpreadsheet, FileDown, Copy, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -647,6 +647,60 @@ function VertalingResult({ navigate, toast }: any) {
           </Link>
         </CardContent>
       </Card>
+
+      {/* Polaris Signal Lookup Results */}
+      {Object.entries((data as any).computedValues || {}).map(([label, value]) => {
+        let parsed: Record<string, { code: string; translation: string }[]> | null = null;
+        try {
+          const obj = JSON.parse(value as string);
+          // Check if it looks like a polaris result (object with array values containing code+translation)
+          if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+            const firstVal = Object.values(obj)[0];
+            if (Array.isArray(firstVal) && firstVal.length > 0 && 'code' in (firstVal as any)[0] && 'translation' in (firstVal as any)[0]) {
+              parsed = obj;
+            }
+          }
+        } catch { /* not JSON, skip */ }
+        if (!parsed) return null;
+
+        return (
+          <Card key={label} className="shadow-sm border-violet-200 dark:border-violet-800">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Search className="h-5 w-5 text-violet-500" />
+                {label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-32">Identifier</TableHead>
+                    <TableHead>Signalen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.entries(parsed).map(([key, signals]) => (
+                    <TableRow key={key}>
+                      <TableCell className="font-mono text-xs font-medium align-top">{key}</TableCell>
+                      <TableCell className="text-xs">
+                        <ul className="space-y-1">
+                          {signals.map((sig, i) => (
+                            <li key={i} className="flex gap-2">
+                              <code className="bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 px-1 rounded text-[10px] shrink-0">{sig.code}</code>
+                              <span className="text-muted-foreground">{sig.translation || <em className="text-amber-500">geen vertaling</em>}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        );
+      })}
 
       {/* Gecombineerd terugkoppelbestand */}
       <Card className="shadow-sm">
