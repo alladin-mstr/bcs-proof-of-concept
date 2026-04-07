@@ -12,6 +12,7 @@ from models.schemas import (
     ControleSeriesStepResult,
     ControleRunResult,
     ExtractionResponse,
+    FieldResult,
     TestRunEntry,
 )
 from services.controle_series_store import (
@@ -169,13 +170,87 @@ async def run_series(series_id: str, data: RunSeriesRequest):
         responses: list[ExtractionResponse] = []
 
         try:
+            import json as _json
+
+            from services.translation_rules_store import get_translation_rules_dict
+            translation_rules = get_translation_rules_dict()
+
+            # Load spreadsheet grid data for any spreadsheet files
+            grid_data: dict[str, dict] = {}
+            for file_def in controle.files:
+                if file_def.fileType == "spreadsheet" and file_def.spreadsheetId:
+                    grid_json = storage.get_spreadsheet_grid(file_def.spreadsheetId)
+                    if grid_json:
+                        grid_data[file_def.spreadsheetId] = _json.loads(grid_json)
+
             for file_def in controle.files:
                 is_first_file_def = file_def.id == controle.files[0].id
+
+                if file_def.fileType == "spreadsheet":
+                    # Spreadsheet files: single extraction from controle definition
+                    ss_id = file_def.spreadsheetId
+                    grid = grid_data.get(ss_id) if ss_id else None
+                    field_results = []
+                    extracted_values: dict[str, str] = {}
+
+                    for field in file_def.fields:
+                        value = ""
+                        if grid and field.type == "cell" and field.cell_ref:
+                            row_val = grid["rows"][field.cell_ref.row][field.cell_ref.col] if field.cell_ref.row < grid["row_count"] and field.cell_ref.col < grid["col_count"] else None
+                            value = str(row_val) if row_val is not None else ""
+                        elif grid and field.type == "cell_range" and field.range_ref:
+                            values = []
+                            for r in range(field.range_ref.startRow, field.range_ref.endRow + 1):
+                                for c in range(field.range_ref.startCol, field.range_ref.endCol + 1):
+                                    if r < grid["row_count"] and c < grid["col_count"]:
+                                        val = grid["rows"][r][c]
+                                        if val is not None:
+                                            values.append(str(val))
+                            value = ", ".join(values)
+
+                        extracted_values[field.label] = value
+                        field_results.append(FieldResult(
+                            label=field.label,
+                            field_type=field.type,
+                            value=value,
+                            status="ok" if value else "empty",
+                            rule_results=[],
+                            step_traces=[],
+                        ))
+
+                    rule_results_list = []
+                    computed_values: dict[str, str] = {}
+                    if is_first_file_def and controle.rules:
+                        from services.rule_engine import RuleEngine
+                        engine = RuleEngine(
+                            current_template_id=step.controleId,
+                            extracted_values=extracted_values,
+                            grid_data=grid_data,
+                            translation_rules=translation_rules,
+                            series_context=series_context,
+                        )
+                        computed_values, rule_results_list = engine.evaluate_all(
+                            controle.rules, controle.computedFields
+                        )
+
+                    ss_filename = file_def.spreadsheetFilename or (ss_id or "")
+                    responses.append(ExtractionResponse(
+                        pdf_id=ss_id or "",
+                        template_id=step.controleId,
+                        results=field_results,
+                        needs_review=any(r.status != "ok" for r in field_results),
+                        template_rule_results=rule_results_list,
+                        computed_values=computed_values,
+                        source_filename=ss_filename,
+                    ))
+                    continue
+
+                # PDF handling: loop over all provided pdf_ids for this file_def
                 pdf_ids = step_files.get(file_def.id, [])
                 if not pdf_ids:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Missing PDF for file '{file_def.label}' (id: {file_def.id}) in step '{step.controleName}'.",
+                        detail=f"Missing file for '{file_def.label}' (id: {file_def.id}) in step '{step.controleName}'.",
                     )
 
                 for pdf_id in pdf_ids:
