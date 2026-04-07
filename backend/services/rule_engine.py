@@ -153,6 +153,7 @@ class RuleEngine:
         cross_table_values: dict[str, dict[str, list[dict[str, str]]]] | None = None,
         series_context: dict[str, "ControleRunResult"] | None = None,
         grid_data: dict[str, dict] | None = None,
+        translation_rules: dict[str, str] | None = None,
     ):
         self.current_template_id = current_template_id
         self.values = extracted_values
@@ -162,6 +163,7 @@ class RuleEngine:
         self.cross_table_values = cross_table_values or {}
         self.series_context = series_context or {}
         self.grid_data = grid_data or {}
+        self.translation_rules = translation_rules or {}
 
     def resolve_operand(self, operand: RuleOperand) -> str | None:
         """Resolve an operand to its string value."""
@@ -378,6 +380,31 @@ class RuleEngine:
                 elif mode == "any_pass":
                     return "true" if passing > 0 else "false"
             return None
+
+        # Handle polaris_lookup operation
+        if op == "polaris_lookup":
+            pc = comp.polaris_config
+            if not pc or not pc.spreadsheet_id or pc.spreadsheet_id not in self.grid_data:
+                return None
+            grid = self.grid_data[pc.spreadsheet_id]
+            headers = grid.get("headers", [])
+            if pc.key_column not in headers or pc.signal_column not in headers:
+                return None
+            key_idx = headers.index(pc.key_column)
+            sig_idx = headers.index(pc.signal_column)
+            # Group signals by key
+            grouped: dict[str, list[dict[str, str]]] = {}
+            for row in grid["rows"]:
+                key_val = str(row[key_idx]) if key_idx < len(row) and row[key_idx] is not None else ""
+                sig_val = str(row[sig_idx]) if sig_idx < len(row) and row[sig_idx] is not None else ""
+                if not key_val or not sig_val:
+                    continue
+                translation = self.translation_rules.get(sig_val, "")
+                if key_val not in grouped:
+                    grouped[key_val] = []
+                grouped[key_val].append({"code": sig_val, "translation": translation})
+            import json as _json
+            return _json.dumps(grouped, ensure_ascii=False)
 
         # Resolve operands
         raw_values = [self.resolve_operand(op) for op in comp.operands]

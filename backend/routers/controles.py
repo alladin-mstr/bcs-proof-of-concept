@@ -91,6 +91,9 @@ async def run_controle(controle_id: str, data: RunControleRequest):
             if grid_json:
                 grid_data[file_def.spreadsheetId] = _json.loads(grid_json)
 
+    from services.translation_rules_store import get_translation_rules_dict
+    translation_rules = get_translation_rules_dict()
+
     # Collect all fields across files for combined rule evaluation
     all_fields = []
     for file_def in controle.files:
@@ -138,6 +141,7 @@ async def run_controle(controle_id: str, data: RunControleRequest):
                     current_template_id=controle_id,
                     extracted_values=extracted_values,
                     grid_data=grid_data,
+                    translation_rules=translation_rules,
                 )
                 computed_values, rule_results_list = engine.evaluate_all(
                     controle.rules, controle.computedFields

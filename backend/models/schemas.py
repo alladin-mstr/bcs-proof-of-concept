@@ -92,6 +92,13 @@ class Condition(BaseModel):
     else_value: RuleOperand
 
 
+class PolarisConfig(BaseModel):
+    """Configuration for a Polaris signal lookup node."""
+    spreadsheet_id: str
+    key_column: str
+    signal_column: str
+
+
 class ValidationConfig(BaseModel):
     """Configuration for a validation rule."""
     rule_type: Literal["exact_match", "data_type", "range", "one_of", "pattern", "not_empty", "date_before", "date_after", "compare_field"]
@@ -116,6 +123,7 @@ class ComputationConfig(BaseModel):
     output_datatype: DataType | None = None
     condition: Condition | None = None      # for if/then/else
     row_filter_mode: RowFilterMode | None = None  # for row_filter operation
+    polaris_config: PolarisConfig | None = None  # for polaris_lookup operation
 
 
 class TemplateRule(BaseModel):
