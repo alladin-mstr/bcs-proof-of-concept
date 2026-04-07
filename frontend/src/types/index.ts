@@ -51,7 +51,9 @@ export type RuleOperand =
   | { type: "field_ref"; ref: FieldRef }
   | { type: "literal"; value: string; datatype?: DataType }
   | { type: "computed_ref"; computed_id: string }
-  | { type: "column_ref"; ref: FieldRef; column_label: string };
+  | { type: "column_ref"; ref: FieldRef; column_label: string }
+  | { type: "formula"; expression: string; spreadsheet_id: string }
+  | { type: "range_ref"; spreadsheet_id: string; range: CellRange };
 
 export interface Condition {
   operand_a: RuleOperand;
@@ -111,7 +113,7 @@ export interface TemplateRuleResult {
 
 // --- React Flow node types for Rules editor ---
 
-export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter";
+export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter" | "formula" | "cell_range";
 
 export interface RuleNodeData {
   label: string;
@@ -145,6 +147,12 @@ export interface RuleNodeData {
   selectedColumnLabel?: string;
   // table_row_filter: mode
   rowFilterMode?: RowFilterMode;
+  // Spreadsheet formula node
+  formulaExpression?: string;
+  spreadsheetId?: string;
+  // Cell range node
+  rangeExpression?: string;  // e.g. "B2:B50"
+  cellRange?: CellRange;
   // Last evaluated value (for display)
   lastValue?: string;
   lastPassed?: boolean;
@@ -209,7 +217,7 @@ export interface TableConfig {
 export interface Field {
   id: string;
   label: string;
-  type: "static" | "dynamic" | "table";
+  type: "static" | "dynamic" | "table" | "cell" | "cell_range";
   anchor_mode: AnchorMode;
   anchors: Anchor[];
   value_region: Region;
@@ -222,6 +230,9 @@ export interface Field {
   chain: ChainStep[];
   source?: "a" | "b";
   table_config?: TableConfig;
+  // Spreadsheet cell fields
+  cell_ref?: CellRef;
+  range_ref?: CellRange;
 }
 
 export interface Template {
@@ -245,7 +256,7 @@ export type TableRow = Record<string, string>;
 
 export interface FieldResult {
   label: string;
-  field_type: "static" | "dynamic" | "table";
+  field_type: "static" | "dynamic" | "table" | "cell" | "cell_range";
   value: string;
   status: "ok" | "anchor_mismatch" | "anchor_not_found" | "anchor_shifted" | "anchor_relocated" | "empty" | "rule_failed";
   source?: "a" | "b";
@@ -298,12 +309,40 @@ export interface TestRunEntry {
 
 // --- Controle (unified control entity) ---
 
+export interface SheetData {
+  headers: string[];
+  rows: CellValue[][];
+  rowCount: number;
+  colCount: number;
+}
+
+export type CellValue = string | number | boolean | null;
+
+export interface CellRef {
+  col: number;
+  row: number;
+}
+
+export interface CellRange {
+  startCol: number;
+  startRow: number;
+  endCol: number;
+  endRow: number;
+}
+
 export interface ControleFile {
   id: string;
   label: string;
+  fileType: "pdf" | "spreadsheet";
+  // PDF-specific
   pdfId: string | null;
   pdfFilename: string | null;
   pageCount: number;
+  // Spreadsheet-specific
+  spreadsheetId: string | null;
+  spreadsheetFilename: string | null;
+  sheetData: SheetData | null;
+  // Shared
   fields: Field[];
   extractionResults: FieldResult[] | null;
 }
