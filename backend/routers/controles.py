@@ -42,6 +42,15 @@ async def list_all_runs():
     return sorted(runs, key=lambda r: r.runAt, reverse=True)
 
 
+@router.get("/runs/{run_id}/details", response_model=list[ExtractionResponse])
+async def get_run_details(run_id: str):
+    storage = get_storage()
+    content = storage.get_controle_run_details(run_id)
+    if content is None:
+        raise HTTPException(status_code=404, detail="Run details not found")
+    return json.loads(content)
+
+
 @router.get("/{controle_id}", response_model=Controle)
 async def get_one_controle(controle_id: str):
     controle = get_controle(controle_id)
@@ -247,5 +256,9 @@ async def run_controle(controle_id: str, data: RunControleRequest):
         runAt=datetime.now(timezone.utc),
     )
     storage.save_controle_run(run_result.id, run_result.model_dump_json(indent=2))
+
+    # Persist full extraction details for the viewer
+    details_json = json.dumps([r.model_dump() for r in responses], indent=2, default=str)
+    storage.save_controle_run_details(run_result.id, details_json)
 
     return responses

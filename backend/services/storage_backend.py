@@ -81,6 +81,12 @@ class StorageBackend(ABC):
     @abstractmethod
     def list_controle_run_ids(self) -> list[str]: ...
 
+    @abstractmethod
+    def save_controle_run_details(self, run_id: str, content: str) -> None: ...
+
+    @abstractmethod
+    def get_controle_run_details(self, run_id: str) -> str | None: ...
+
     # -- Controles --
 
     @abstractmethod
@@ -292,7 +298,16 @@ class LocalStorageBackend(StorageBackend):
         return path.read_text(encoding="utf-8")
 
     def list_controle_run_ids(self) -> list[str]:
-        return [p.stem for p in sorted(self._controle_runs.glob("*.json"))]
+        return [p.stem for p in sorted(self._controle_runs.glob("*.json")) if not p.stem.endswith("_details")]
+
+    def save_controle_run_details(self, run_id: str, content: str) -> None:
+        (self._controle_runs / f"{run_id}_details.json").write_text(content, encoding="utf-8")
+
+    def get_controle_run_details(self, run_id: str) -> str | None:
+        path = self._controle_runs / f"{run_id}_details.json"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
 
     # -- Controles --
 
@@ -582,9 +597,18 @@ class AzureBlobStorageBackend(StorageBackend):
         ids = []
         for blob in self._controle_runs.list_blobs():
             name = blob.name
-            if name.endswith(".json"):
+            if name.endswith(".json") and not name.endswith("_details.json"):
                 ids.append(name.removesuffix(".json"))
         return sorted(ids)
+
+    def save_controle_run_details(self, run_id: str, content: str) -> None:
+        self._controle_runs.upload_blob(f"{run_id}_details.json", content, overwrite=True)
+
+    def get_controle_run_details(self, run_id: str) -> str | None:
+        blob_client = self._controle_runs.get_blob_client(f"{run_id}_details.json")
+        if not blob_client.exists():
+            return None
+        return blob_client.download_blob().readall().decode("utf-8")
 
     # -- Controles --
 

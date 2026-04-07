@@ -331,6 +331,10 @@ async def run_series(series_id: str, data: RunSeriesRequest):
             )
             storage.save_controle_run(run_result.id, run_result.model_dump_json(indent=2))
 
+            # Persist full extraction details for the viewer
+            details_json = json.dumps([r.model_dump() for r in responses], indent=2, default=str)
+            storage.save_controle_run_details(run_result.id, details_json)
+
             # Add to series_context for data piping to subsequent steps
             series_context[step.controleId] = run_result
 
