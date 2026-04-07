@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from models.schemas import Controle, ControleCreate, ControleRunResult, ExtractionResponse, TestRunEntry
+from models.schemas import Controle, ControleCreate, ControleRunResult, ExtractionResponse, FieldResult, TestRunEntry
 from services.controle_store import (
     delete_controle,
     get_controle,
@@ -81,12 +81,79 @@ async def run_controle(controle_id: str, data: RunControleRequest):
     storage = get_storage()
     responses: list[ExtractionResponse] = []
 
+    import json as _json
+
+    # Load spreadsheet grid data for any spreadsheet files
+    grid_data: dict[str, dict] = {}
+    for file_def in controle.files:
+        if file_def.fileType == "spreadsheet" and file_def.spreadsheetId:
+            grid_json = storage.get_spreadsheet_grid(file_def.spreadsheetId)
+            if grid_json:
+                grid_data[file_def.spreadsheetId] = _json.loads(grid_json)
+
     # Collect all fields across files for combined rule evaluation
     all_fields = []
     for file_def in controle.files:
         all_fields.extend(file_def.fields)
 
     for file_def in controle.files:
+        if file_def.fileType == "spreadsheet":
+            # Resolve spreadsheet fields directly from grid
+            ss_id = file_def.spreadsheetId
+            grid = grid_data.get(ss_id) if ss_id else None
+            field_results = []
+            extracted_values: dict[str, str] = {}
+
+            for field in file_def.fields:
+                value = ""
+                if grid and field.type == "cell" and field.cell_ref:
+                    row_val = grid["rows"][field.cell_ref.row][field.cell_ref.col] if field.cell_ref.row < grid["row_count"] and field.cell_ref.col < grid["col_count"] else None
+                    value = str(row_val) if row_val is not None else ""
+                elif grid and field.type == "cell_range" and field.range_ref:
+                    values = []
+                    for r in range(field.range_ref.startRow, field.range_ref.endRow + 1):
+                        for c in range(field.range_ref.startCol, field.range_ref.endCol + 1):
+                            if r < grid["row_count"] and c < grid["col_count"]:
+                                val = grid["rows"][r][c]
+                                if val is not None:
+                                    values.append(str(val))
+                    value = ", ".join(values)
+
+                extracted_values[field.label] = value
+                field_results.append(FieldResult(
+                    label=field.label,
+                    field_type=field.type,
+                    value=value,
+                    status="ok" if value else "empty",
+                    rule_results=[],
+                    step_traces=[],
+                ))
+
+            # Run rules for first file
+            rule_results_list = []
+            computed_values: dict[str, str] = {}
+            if file_def.id == controle.files[0].id and controle.rules:
+                from services.rule_engine import RuleEngine
+                engine = RuleEngine(
+                    current_template_id=controle_id,
+                    extracted_values=extracted_values,
+                    grid_data=grid_data,
+                )
+                computed_values, rule_results_list = engine.evaluate_all(
+                    controle.rules, controle.computedFields
+                )
+
+            responses.append(ExtractionResponse(
+                pdf_id=ss_id or "",
+                template_id=controle_id,
+                results=field_results,
+                needs_review=any(r.status != "ok" for r in field_results),
+                template_rule_results=rule_results_list,
+                computed_values=computed_values,
+            ))
+            continue
+
+        # Existing PDF handling below (unchanged)
         pdf_id = data.files.get(file_def.id)
         if not pdf_id:
             raise HTTPException(
