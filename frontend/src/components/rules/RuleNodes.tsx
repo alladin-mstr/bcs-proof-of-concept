@@ -439,6 +439,112 @@ export const TableRowFilterNode = memo(({ id, data }: NodeProps & { data: RuleNo
 });
 TableRowFilterNode.displayName = 'TableRowFilterNode';
 
+/* ── Formula Node (Spreadsheet) ── */
+
+export const FormulaNode = memo(({ id, data }: NodeProps & { data: RuleNodeData }) => {
+  const { setNodes } = useReactFlow();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(data.formulaExpression || '');
+
+  const commit = useCallback(() => {
+    const val = draft.trim();
+    setEditing(false);
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, formulaExpression: val } } : n
+      )
+    );
+  }, [id, draft, setNodes]);
+
+  return (
+    <div className="px-2.5 py-1.5 rounded-md border shadow-sm max-w-[220px] border-green-400 bg-green-50 dark:bg-green-950/50">
+      <div className="text-[8px] uppercase tracking-wider font-semibold text-green-600 dark:text-green-400 leading-none mb-0.5">
+        Formula
+      </div>
+      <Handle type="target" position={Position.Left} className={`${HANDLE} !bg-green-500`} />
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') { setDraft(data.formulaExpression || ''); setEditing(false); }
+          }}
+          placeholder="=SUM(A1:A10)"
+          className="text-xs bg-transparent border-b border-green-400/30 outline-none w-full font-mono"
+        />
+      ) : (
+        <div
+          className="text-xs font-mono text-foreground truncate cursor-text hover:opacity-70"
+          onDoubleClick={() => { setDraft(data.formulaExpression || ''); setEditing(true); }}
+          title="Double-click to edit formula"
+        >
+          {data.formulaExpression || <span className="opacity-40 italic">formula...</span>}
+        </div>
+      )}
+      <EditableName id={id} name={data.outputLabel} textClass="text-[9px] text-green-600/70 dark:text-green-400/70" />
+      {data.lastValue !== undefined && (
+        <div className="text-[10px] text-muted-foreground truncate" title={data.lastValue}>= {data.lastValue}</div>
+      )}
+      <Handle type="source" position={Position.Right} className={`${HANDLE} !bg-green-500`} />
+    </div>
+  );
+});
+FormulaNode.displayName = 'FormulaNode';
+
+/* ── Cell Range Node (Spreadsheet) ── */
+
+export const CellRangeNode = memo(({ id, data }: NodeProps & { data: RuleNodeData }) => {
+  const { setNodes } = useReactFlow();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(data.rangeExpression || '');
+
+  const commit = useCallback(() => {
+    const val = draft.trim();
+    setEditing(false);
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, rangeExpression: val } } : n
+      )
+    );
+  }, [id, draft, setNodes]);
+
+  return (
+    <div className="px-2.5 py-1.5 rounded-md border shadow-sm max-w-[180px] border-green-400 bg-green-50 dark:bg-green-950/50">
+      <div className="text-[8px] uppercase tracking-wider font-semibold text-green-600 dark:text-green-400 leading-none mb-0.5">
+        Cell Range
+      </div>
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') { setDraft(data.rangeExpression || ''); setEditing(false); }
+          }}
+          placeholder="B2:B50"
+          className="text-xs bg-transparent border-b border-green-400/30 outline-none w-full font-mono"
+        />
+      ) : (
+        <div
+          className="text-xs font-mono text-foreground truncate cursor-text hover:opacity-70"
+          onDoubleClick={() => { setDraft(data.rangeExpression || ''); setEditing(true); }}
+          title="Double-click to edit range"
+        >
+          {data.rangeExpression || <span className="opacity-40 italic">range...</span>}
+        </div>
+      )}
+      <EditableName id={id} name={data.outputLabel} textClass="text-[9px] text-green-600/70 dark:text-green-400/70" />
+      <Handle type="source" position={Position.Right} className={`${HANDLE} !bg-green-500`} />
+    </div>
+  );
+});
+CellRangeNode.displayName = 'CellRangeNode';
+
 /* ── Export ── */
 
 export const nodeTypes = {
@@ -451,4 +557,6 @@ export const nodeTypes = {
   table_column: TableColumnNode,
   table_aggregate: TableAggregateNode,
   table_row_filter: TableRowFilterNode,
+  formula: FormulaNode,
+  cell_range: CellRangeNode,
 };
