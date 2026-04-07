@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, CheckCircle, AlertTriangle, Clock, ListChecks, Plus, Play, Pencil, FileText, MoreHorizontal, Eye, Trash2 } from "lucide-react";
+import { Search, CheckCircle, AlertTriangle, Clock, ListChecks, Plus, Play, Pencil, FileText, MoreHorizontal, Eye, Trash2, Globe } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,15 +47,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listControles, listControleRuns, deleteControle, listKlanten } from "@/api/client";
+import { listControles, listControleRuns, deleteControle, listKlanten, listGlobalValueGroups, createGlobalValueGroup, updateGlobalValueGroup, deleteGlobalValueGroup } from "@/api/client";
 import { useToast } from "@/hooks/use-toast";
-import type { Controle, ControleRunResult, Klant } from "@/types";
+import type { Controle, ControleRunResult, Klant, GlobalValueGroup, GlobalValue } from "@/types";
 
 export default function MyControls() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"definities" | "resultaten">("definities");
+  const [tab, setTab] = useState<"definities" | "resultaten" | "globale_waarden">("definities");
   const [controles, setControles] = useState<Controle[]>([]);
   const [runs, setRuns] = useState<ControleRunResult[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Controle | null>(null);
@@ -64,11 +64,19 @@ export default function MyControls() {
   const [newName, setNewName] = useState("");
   const [klanten, setKlanten] = useState<Klant[]>([]);
   const [selectedKlantId, setSelectedKlantId] = useState<string>("");
+  const [globalGroups, setGlobalGroups] = useState<GlobalValueGroup[]>([]);
+  const [editingGroup, setEditingGroup] = useState<{ id: string | null; name: string; values: GlobalValue[] } | null>(null);
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<GlobalValueGroup | null>(null);
+  const [deletingGroup, setDeletingGroup] = useState(false);
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
     listControles().then(setControles).catch(() => {});
     listControleRuns().then(setRuns).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    listGlobalValueGroups().then(setGlobalGroups).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -106,6 +114,41 @@ export default function MyControls() {
 
   const filteredControles = controles.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleSaveGroup = async (groupId: string | null, name: string, values: GlobalValue[]) => {
+    try {
+      if (groupId) {
+        const updated = await updateGlobalValueGroup(groupId, { name, values });
+        setGlobalGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+      } else {
+        const created = await createGlobalValueGroup({ name, values });
+        setGlobalGroups((prev) => [created, ...prev]);
+      }
+      setEditingGroup(null);
+      toast({ title: groupId ? "Groep bijgewerkt" : "Groep aangemaakt" });
+    } catch {
+      toast({ title: "Opslaan mislukt", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!deleteGroupTarget) return;
+    setDeletingGroup(true);
+    try {
+      await deleteGlobalValueGroup(deleteGroupTarget.id);
+      setGlobalGroups((prev) => prev.filter((g) => g.id !== deleteGroupTarget.id));
+      toast({ title: "Groep verwijderd" });
+    } catch {
+      toast({ title: "Verwijderen mislukt", variant: "destructive" });
+    } finally {
+      setDeletingGroup(false);
+      setDeleteGroupTarget(null);
+    }
+  };
+
+  const filteredGroups = globalGroups.filter((g) =>
+    g.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const formatDate = (date: Date | string) => {
@@ -177,6 +220,16 @@ export default function MyControls() {
           }`}
         >
           Resultaten
+        </button>
+        <button
+          onClick={() => setTab("globale_waarden")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === "globale_waarden"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Globale waarden
         </button>
       </div>
 
@@ -278,7 +331,7 @@ export default function MyControls() {
             </Table>
           </CardContent>
         </Card>
-      ) : (
+      ) : tab === "resultaten" ? (
         <Card className="shadow-sm">
           <CardContent className="p-0">
             <Table>
@@ -338,6 +391,224 @@ export default function MyControls() {
             </Table>
           </CardContent>
         </Card>
+      ) : (
+        <>
+          {/* New group button */}
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              className="rounded-full shadow-lg"
+              onClick={() => setEditingGroup({ id: null, name: "", values: [] })}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Nieuwe groep
+            </Button>
+          </div>
+
+          {/* Inline edit form */}
+          {editingGroup && (
+            <Card className="shadow-sm">
+              <CardContent className="p-4 space-y-4">
+                <div className="space-y-2">
+                  <Label>Groepsnaam</Label>
+                  <Input
+                    value={editingGroup.name}
+                    onChange={(e) => setEditingGroup({ ...editingGroup, name: e.target.value })}
+                    placeholder="Bijv. Loonheffing 2026"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Waarden</Label>
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[200px]">Naam</TableHead>
+                          <TableHead className="w-[120px]">Type</TableHead>
+                          <TableHead>Waarde</TableHead>
+                          <TableHead className="w-[50px]" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {editingGroup.values.map((v, i) => (
+                          <TableRow key={v.id}>
+                            <TableCell>
+                              <Input
+                                value={v.name}
+                                onChange={(e) => {
+                                  const vals = [...editingGroup.values];
+                                  vals[i] = { ...v, name: e.target.value };
+                                  setEditingGroup({ ...editingGroup, values: vals });
+                                }}
+                                placeholder="Naam"
+                                className="h-8"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={v.dataType}
+                                onValueChange={(val) => {
+                                  const vals = [...editingGroup.values];
+                                  vals[i] = { ...v, dataType: val as GlobalValue["dataType"] };
+                                  setEditingGroup({ ...editingGroup, values: vals });
+                                }}
+                              >
+                                <SelectTrigger className="h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="text">Tekst</SelectItem>
+                                  <SelectItem value="number">Nummer</SelectItem>
+                                  <SelectItem value="date">Datum</SelectItem>
+                                  <SelectItem value="boolean">Boolean</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={v.value}
+                                onChange={(e) => {
+                                  const vals = [...editingGroup.values];
+                                  vals[i] = { ...v, value: e.target.value };
+                                  setEditingGroup({ ...editingGroup, values: vals });
+                                }}
+                                placeholder="Waarde"
+                                className="h-8"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-destructive"
+                                onClick={() => {
+                                  const vals = editingGroup.values.filter((_, j) => j !== i);
+                                  setEditingGroup({ ...editingGroup, values: vals });
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newVal: GlobalValue = {
+                        id: crypto.randomUUID(),
+                        name: "",
+                        dataType: "text",
+                        value: "",
+                      };
+                      setEditingGroup({ ...editingGroup, values: [...editingGroup.values, newVal] });
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Waarde toevoegen
+                  </Button>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setEditingGroup(null)}>
+                    Annuleren
+                  </Button>
+                  <Button
+                    disabled={!editingGroup.name.trim()}
+                    onClick={() => handleSaveGroup(editingGroup.id, editingGroup.name, editingGroup.values)}
+                  >
+                    Opslaan
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Groups table */}
+          <Card className="shadow-sm">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Naam</TableHead>
+                    <TableHead>Waarden</TableHead>
+                    <TableHead>Versie</TableHead>
+                    <TableHead>Laatst bijgewerkt</TableHead>
+                    <TableHead className="text-right">Acties</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredGroups.map((g) => (
+                    <TableRow key={g.id}>
+                      <TableCell className="font-medium">{g.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{g.values.length}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">v{g.version}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(g.updatedAt)}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditingGroup({ id: g.id, name: g.name, values: g.values })}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Bewerken
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteGroupTarget(g)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Verwijderen
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredGroups.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-12">
+                        <Globe className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-muted-foreground">Nog geen globale waarden</p>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Delete group confirmation */}
+          <AlertDialog open={!!deleteGroupTarget} onOpenChange={(open) => !open && setDeleteGroupTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Groep verwijderen?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Weet je zeker dat je &quot;{deleteGroupTarget?.name}&quot; wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteGroup}
+                  disabled={deletingGroup}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deletingGroup ? "Verwijderen..." : "Verwijderen"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
       )}
 
       {/* New controle name dialog */}
