@@ -360,3 +360,48 @@ export interface TestRun {
   entries: TestRunEntry[];
   created_at: string;
 }
+
+// --- Controle Series ---
+
+export type SeriesStepCondition = "always" | "if_passed" | "if_failed";
+
+export interface ControleSeriesStep {
+  id: string;
+  order: number;
+  controleId: string;
+  controleName: string;
+  condition: SeriesStepCondition;
+}
+
+export interface ControleSeries {
+  id: string;
+  name: string;
+  klantId: string;
+  klantName: string;
+  steps: ControleSeriesStep[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SeriesStepResultStatus = "passed" | "failed" | "skipped" | "error";
+
+export interface ControleSeriesStepResult {
+  stepId: string;
+  controleId: string;
+  controleName: string;
+  status: SeriesStepResultStatus;
+  controleRunId?: string;
+}
+
+export type SeriesRunStatus = "running" | "completed" | "stopped";
+
+export interface ControleSeriesRun {
+  id: string;
+  seriesId: string;
+  seriesName: string;
+  klantId: string;
+  klantName: string;
+  status: SeriesRunStatus;
+  stepResults: ControleSeriesStepResult[];
+  runAt: string;
+}
