@@ -151,6 +151,7 @@ class RuleEngine:
         cross_template_values: dict[str, dict[str, str]] | None = None,
         table_values: dict[str, list[dict[str, str]]] | None = None,
         cross_table_values: dict[str, dict[str, list[dict[str, str]]]] | None = None,
+        series_context: dict[str, "ControleRunResult"] | None = None,
     ):
         self.current_template_id = current_template_id
         self.values = extracted_values
@@ -158,6 +159,7 @@ class RuleEngine:
         self.cross_values = cross_template_values or {}
         self.table_values = table_values or {}
         self.cross_table_values = cross_table_values or {}
+        self.series_context = series_context or {}
 
     def resolve_operand(self, operand: RuleOperand) -> str | None:
         """Resolve an operand to its string value."""
@@ -170,6 +172,13 @@ class RuleEngine:
                 return None
             # Cross-template reference
             if ref.template_id and ref.template_id != self.current_template_id:
+                # Check series_context first (data piped from earlier series steps)
+                if ref.template_id in self.series_context:
+                    run_result = self.series_context[ref.template_id]
+                    for entry in run_result.entries:
+                        if entry.label == ref.field_label or entry.label.endswith(f"→ {ref.field_label}"):
+                            return entry.value
+                # Fall back to stored cross-template values
                 template_vals = self.cross_values.get(ref.template_id, {})
                 return template_vals.get(ref.field_label)
             # Local field

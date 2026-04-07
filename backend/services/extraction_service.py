@@ -449,6 +449,7 @@ def extract_all_fields(
     template_rules: list[TemplateRule] | None = None,
     computed_fields: list[ComputedField] | None = None,
     template_id: str = "",
+    series_context=None,
 ) -> tuple[list[FieldResult], list[TemplateRuleResult], dict[str, str]]:
     """Extract all fields from a PDF using three-pass approach.
 
@@ -731,6 +732,7 @@ def extract_all_fields(
             cross_template_values=cross_values,
             table_values=table_values,
             cross_table_values=cross_table_values,
+            series_context=series_context,
         )
         computed_values, template_rule_results = engine.evaluate_all(
             template_rules, computed_fields
