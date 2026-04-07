@@ -1,0 +1,96 @@
+<h2>How should the hierarchy navigate?</h2>
+<p class="subtitle">Pick the navigation pattern that fits best</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="display:flex;height:280px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:13px;">
+        <div style="width:220px;background:#f8fafc;border-right:1px solid #e2e8f0;padding:12px;">
+          <div style="font-weight:600;margin-bottom:12px;color:#334155;">Klanten</div>
+          <div style="padding:4px 8px;background:#e0f2fe;border-radius:4px;margin-bottom:2px;color:#0369a1;">▾ Acme Group</div>
+          <div style="padding:4px 8px 4px 24px;margin-bottom:2px;color:#475569;">▾ Finance</div>
+          <div style="padding:4px 8px 4px 40px;background:#dbeafe;border-radius:4px;margin-bottom:2px;color:#1d4ed8;font-weight:500;">Accounts Payable</div>
+          <div style="padding:4px 8px 4px 40px;margin-bottom:2px;color:#475569;">Accounts Receivable</div>
+          <div style="padding:4px 8px 4px 24px;margin-bottom:2px;color:#475569;">▸ HR</div>
+          <div style="padding:4px 8px;margin-bottom:2px;color:#475569;">▸ Beta Corp</div>
+        </div>
+        <div style="flex:1;padding:16px;">
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Acme Group › Finance</div>
+          <div style="font-weight:600;font-size:16px;margin-bottom:16px;color:#1e293b;">Accounts Payable</div>
+          <div style="background:#f1f5f9;border-radius:6px;padding:12px;margin-bottom:8px;">
+            <div style="font-weight:500;margin-bottom:4px;">Controles</div>
+            <div style="font-size:12px;color:#64748b;">Payroll check · <span style="color:#059669;">Gepubliceerd</span></div>
+          </div>
+          <div style="background:#f1f5f9;border-radius:6px;padding:12px;">
+            <div style="font-weight:500;margin-bottom:4px;">Series</div>
+            <div style="font-size:12px;color:#64748b;">Quarterly audit · 3 stappen</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Tree Sidebar</h3>
+      <p>Always-visible tree on the left. Click any node to see its details on the right. Fast navigation between levels.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:280px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:13px;padding:16px;">
+        <div style="font-size:12px;color:#6366f1;margin-bottom:12px;">Klanten › <span style="color:#6366f1;">Acme Group</span> › <span style="color:#6366f1;">Finance</span> › <span style="font-weight:600;color:#1e293b;">Accounts Payable</span></div>
+        <div style="font-weight:600;font-size:18px;margin-bottom:16px;color:#1e293b;">Accounts Payable</div>
+        <div style="background:#f1f5f9;border-radius:6px;padding:12px;margin-bottom:8px;">
+          <div style="font-weight:500;margin-bottom:8px;">Controles</div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid #e2e8f0;">
+            <span>Payroll check</span>
+            <span style="color:#059669;background:#ecfdf5;padding:2px 8px;border-radius:10px;font-size:11px;">Gepubliceerd</span>
+          </div>
+        </div>
+        <div style="background:#f1f5f9;border-radius:6px;padding:12px;">
+          <div style="font-weight:500;margin-bottom:8px;">Sub-afdelingen</div>
+          <div style="font-size:12px;color:#64748b;font-style:italic;">Geen sub-afdelingen</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Breadcrumb Drill-Down</h3>
+      <p>Current layout stays. Each level shows its children as a list. Breadcrumbs at the top to navigate back up the tree.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="height:280px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:13px;padding:16px;">
+        <div style="font-weight:600;font-size:16px;margin-bottom:16px;color:#1e293b;">Klanten</div>
+        <div style="padding:8px 12px;background:#f8fafc;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span style="color:#94a3b8;">▾</span> <strong>Acme Group</strong> <span style="color:#94a3b8;font-size:11px;">422 medewerkers</span></div>
+          <span style="color:#94a3b8;">›</span>
+        </div>
+        <div style="padding:8px 12px 8px 32px;background:#f8fafc;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span style="color:#94a3b8;">▾</span> Finance <span style="color:#94a3b8;font-size:11px;">2 controles</span></div>
+          <span style="color:#94a3b8;">›</span>
+        </div>
+        <div style="padding:8px 12px 8px 52px;background:#eff6ff;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
+          <div>Accounts Payable <span style="color:#94a3b8;font-size:11px;">1 controle</span></div>
+          <span style="color:#94a3b8;">›</span>
+        </div>
+        <div style="padding:8px 12px 8px 52px;background:#f8fafc;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
+          <div>Accounts Receivable</div>
+          <span style="color:#94a3b8;">›</span>
+        </div>
+        <div style="padding:8px 12px 8px 32px;background:#f8fafc;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span style="color:#94a3b8;">▸</span> HR <span style="color:#94a3b8;font-size:11px;">3 controles</span></div>
+          <span style="color:#94a3b8;">›</span>
+        </div>
+        <div style="padding:8px 12px;background:#f8fafc;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">
+          <div><span style="color:#94a3b8;">▸</span> <strong>Beta Corp</strong></div>
+          <span style="color:#94a3b8;">›</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Indented List</h3>
+      <p>Single flat list with indentation showing depth. Like a file explorer. Click any row to open its detail page.</p>
+    </div>
+  </div>
+</div>

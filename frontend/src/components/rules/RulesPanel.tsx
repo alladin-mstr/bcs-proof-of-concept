@@ -30,6 +30,7 @@ import {
   Search, SearchX, TextCursor, TextCursorInput as TextEnd,
   ListChecks, ListX, CalendarCheck, CalendarClock, CalendarRange,
   CircleDot, CircleOff,
+  Code,
 } from 'lucide-react';
 
 const ICN = "w-3.5 h-3.5";
@@ -93,6 +94,7 @@ const NODE_MENU_ITEMS: {
   { type: 'table_row_filter', label: 'Row Filter (count)', category: 'Table', icon: <Search className={ICN} />, defaults: { rowFilterMode: 'count' as RowFilterMode } },
   { type: 'table_row_filter', label: 'Row Filter (all?)', category: 'Table', icon: <ListChecks className={ICN} />, defaults: { rowFilterMode: 'all_pass' as RowFilterMode } },
   { type: 'table_row_filter', label: 'Row Filter (any?)', category: 'Table', icon: <CircleDot className={ICN} />, defaults: { rowFilterMode: 'any_pass' as RowFilterMode } },
+  { type: 'custom_script', label: 'Custom Script', category: 'Table', icon: <Code className={ICN} />, defaults: { customScript: '' } },
   // Spreadsheet
   { type: 'formula', label: 'Formula', category: 'Spreadsheet', icon: <Sigma className={ICN} />, defaults: { formulaExpression: '' } },
   { type: 'cell_range', label: 'Cell Range', category: 'Spreadsheet', icon: <BarChart3 className={ICN} />, defaults: { rangeExpression: '' } },
@@ -339,12 +341,13 @@ export default function RulesPanel() {
 
       // Table column nodes can only connect to table_aggregate or table_row_filter
       if (src?.type === 'table_column') {
-        return tgt?.type === 'table_aggregate' || (tgt?.type === 'table_row_filter' && connection.targetHandle === 'column');
+        return tgt?.type === 'table_aggregate' || tgt?.type === 'custom_script' || (tgt?.type === 'table_row_filter' && connection.targetHandle === 'column');
       }
 
-      // Table field_input nodes can connect to table_aggregate or table_row_filter (column handle)
+      // Table field_input nodes can connect to table_aggregate, custom_script, or table_row_filter (column handle)
       if (isTableOrSpreadsheetFieldInput(src)) {
         if (tgt?.type === 'table_aggregate') return true;
+        if (tgt?.type === 'custom_script') return true;
         if (tgt?.type === 'table_row_filter' && connection.targetHandle === 'column') return true;
       }
 
@@ -360,7 +363,7 @@ export default function RulesPanel() {
 
       // Cell range output can connect to aggregate, math, or formula nodes
       if (src?.type === 'cell_range') {
-        return tgt?.type === 'table_aggregate' || tgt?.type === 'math_operation' || tgt?.type === 'formula';
+        return tgt?.type === 'table_aggregate' || tgt?.type === 'math_operation' || tgt?.type === 'formula' || tgt?.type === 'custom_script';
       }
 
       return true;

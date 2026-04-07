@@ -39,7 +39,7 @@ function operandFromNode(node: Node | undefined): RuleOperand | null {
     };
   }
   if (node.type === 'math_operation' || node.type === 'comparison' || node.type === 'condition'
-    || node.type === 'table_aggregate' || node.type === 'table_row_filter') {
+    || node.type === 'table_aggregate' || node.type === 'table_row_filter' || node.type === 'custom_script') {
     return { type: 'computed_ref' as const, computed_id: node.id };
   }
   if (node.type === 'formula') {
@@ -467,6 +467,33 @@ export function serializeGraph(
         label: name,
         template_id: templateId,
         rule_id: node.id,
+      });
+    }
+
+    if (node.type === 'custom_script') {
+      const src = sourceNode(nodes, edges, node.id);
+      const operands: RuleOperand[] = src ? [operandFromNode(src)].filter((op): op is RuleOperand => op !== null) : [];
+      const name = getNodeName(data, `script(${(data.customScript || '').split('\n')[0]?.trim().slice(0, 20) || '...'})`);
+
+      rules.push({
+        id: node.id,
+        name,
+        type: 'computation',
+        enabled: true,
+        computation: {
+          operation: 'custom_script' as MathOperation,
+          operands,
+          output_label: name,
+          output_datatype: data.outputDatatype,
+        },
+      });
+
+      computedFields.push({
+        id: node.id,
+        label: name,
+        template_id: templateId,
+        rule_id: node.id,
+        datatype: data.outputDatatype,
       });
     }
   }
