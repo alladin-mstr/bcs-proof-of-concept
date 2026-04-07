@@ -79,13 +79,13 @@ export interface ValidationConfig {
 }
 
 export interface ComputationConfig {
-  operation: MathOperation | AggregateOperation | "row_filter" | "polaris_lookup";
+  operation: MathOperation | AggregateOperation | "row_filter" | "signal_lookup";
   operands: RuleOperand[];
   output_label: string;
   output_datatype?: DataType;
   condition?: Condition;
   row_filter_mode?: RowFilterMode;
-  polaris_config?: PolarisConfig;
+  signal_lookup_config?: SignalLookupConfig;
 }
 
 export interface TemplateRule {
@@ -115,7 +115,7 @@ export interface TemplateRuleResult {
 
 // --- React Flow node types for Rules editor ---
 
-export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter" | "formula" | "cell_range" | "polaris_lookup" | "global_value_input";
+export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter" | "formula" | "cell_range" | "signal_lookup" | "global_value_input" | "custom_script";
 
 export interface RuleNodeData {
   label: string;
@@ -155,10 +155,10 @@ export interface RuleNodeData {
   // Cell range node
   rangeExpression?: string;  // e.g. "B2:B50"
   cellRange?: CellRange;
-  // Polaris lookup node
-  polarisSpreadsheetId?: string;
-  polarisKeyColumn?: string;
-  polarisSignalColumn?: string;
+  // Signal lookup node
+  signalSpreadsheetId?: string;
+  signalKeyColumn?: string;
+  signalSignalColumn?: string;
   // Last evaluated value (for display)
   lastValue?: string;
   lastPassed?: boolean;
@@ -167,6 +167,9 @@ export interface RuleNodeData {
   globalValueId?: string;
   groupName?: string;
   globalDataType?: "text" | "number" | "date" | "boolean";
+  // Custom script node
+  customScript?: string;
+  customScriptResult?: string;
 }
 
 // --- Chain step types ---
@@ -296,6 +299,13 @@ export interface ExtractionResponse {
   pdf_id_b?: string;
   template_rule_results: TemplateRuleResult[];
   computed_values: Record<string, string>;
+  source_filename?: string;  // NEW: identifies which uploaded file produced this response
+}
+
+export interface UploadedFile {
+  id: string;           // pdf_id or spreadsheet_id
+  filename: string;
+  type: "pdf" | "spreadsheet";
 }
 
 // Layout analysis types
@@ -341,7 +351,7 @@ export interface CellRange {
   endRow: number;
 }
 
-export interface PolarisConfig {
+export interface SignalLookupConfig {
   spreadsheet_id: string;
   key_column: string;
   signal_column: string;
