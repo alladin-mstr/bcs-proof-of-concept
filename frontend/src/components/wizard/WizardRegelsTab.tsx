@@ -3,8 +3,9 @@ import { useAppStore } from "@/store/appStore";
 import RulesPanel from "@/components/rules/RulesPanel";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { testExtraction, testMixedExtraction } from "@/api/client";
-import { Play, Loader2, CheckCircle, XCircle, AlertTriangle, FileText } from "lucide-react";
+import { Play, Loader2, CheckCircle, XCircle, AlertTriangle, FileText, Maximize2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Controle, RuleNodeData, TemplateRule, ExtractionResponse } from "@/types";
 import type { Node, Edge } from "@xyflow/react";
 
@@ -162,6 +163,24 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
   const [previewResults, setPreviewResults] = useState<FilePreviewResult[] | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [tab, setTab] = useState<"regels" | "resultaten">("regels");
+  const [polarisModalData, setPolarisModalData] = useState<{ label: string; entries: [string, {code: string; translation: string}[]][] } | null>(null);
+
+  const exportPolarisCsv = useCallback((label: string, entries: [string, {code: string; translation: string}[]][]) => {
+    const rows = [["Medewerker", "Code", "Vertaling"]];
+    for (const [key, signals] of entries) {
+      for (const sig of signals) {
+        rows.push([key, sig.code, sig.translation || ""]);
+      }
+    }
+    const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(";")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${label.replace(/\s+/g, "_")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
 
   useEffect(() => {
     loadAllFieldsForRules();
@@ -244,6 +263,7 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
   const rulesFailed = ruleResults.length - rulesPassed;
 
   return (
+    <>
     <ResizablePanelGroup direction="horizontal" className="h-full">
       <ResizablePanel defaultSize={65} minSize={30}>
         <RulesPanel />
@@ -544,8 +564,10 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
                                               const firstVal = Object.values(obj)[0];
                                               if (Array.isArray(firstVal) && firstVal.length > 0 && 'code' in (firstVal as any)[0]) {
                                                 const entries = Object.entries(obj) as [string, {code: string; translation: string}[]][];
+                                                const preview = entries.slice(0, 3);
+                                                const totalSignals = entries.reduce((sum, [, s]) => sum + s.length, 0);
                                                 return (
-                                                  <div className="text-left max-h-[300px] overflow-y-auto">
+                                                  <div className="text-left">
                                                     <table className="w-full text-[11px] border-collapse">
                                                       <thead>
                                                         <tr className="border-b border-violet-200 dark:border-violet-800">
@@ -554,7 +576,7 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
                                                         </tr>
                                                       </thead>
                                                       <tbody>
-                                                        {entries.map(([key, signals]) => (
+                                                        {preview.map(([key, signals]) => (
                                                           <tr key={key} className="border-b border-border/30 align-top">
                                                             <td className="px-2 py-1.5 font-mono font-medium text-foreground whitespace-nowrap">{key}</td>
                                                             <td className="px-2 py-1.5">
@@ -569,9 +591,34 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
                                                             </td>
                                                           </tr>
                                                         ))}
+                                                        {entries.length > 3 && (
+                                                          <tr className="border-b border-border/30">
+                                                            <td colSpan={2} className="px-2 py-1 text-center text-[10px] text-muted-foreground italic">
+                                                              +{entries.length - 3} meer...
+                                                            </td>
+                                                          </tr>
+                                                        )}
                                                       </tbody>
                                                     </table>
-                                                    <div className="text-[10px] text-violet-500 mt-1 font-medium">{entries.length} medewerkers · {entries.reduce((sum, [, s]) => sum + s.length, 0)} signalen</div>
+                                                    <div className="flex items-center justify-between mt-1.5">
+                                                      <span className="text-[10px] text-violet-500 font-medium">{entries.length} medewerkers · {totalSignals} signalen</span>
+                                                      <div className="flex items-center gap-1">
+                                                        <button
+                                                          onClick={() => setPolarisModalData({ label: rr.rule_name, entries })}
+                                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-violet-600 hover:bg-violet-100 dark:hover:bg-violet-900/50 rounded transition-colors"
+                                                        >
+                                                          <Maximize2 className="w-3 h-3" />
+                                                          Bekijk alles
+                                                        </button>
+                                                        <button
+                                                          onClick={() => exportPolarisCsv(rr.rule_name, entries)}
+                                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-violet-600 hover:bg-violet-100 dark:hover:bg-violet-900/50 rounded transition-colors"
+                                                        >
+                                                          <Download className="w-3 h-3" />
+                                                          Export
+                                                        </button>
+                                                      </div>
+                                                    </div>
                                                   </div>
                                                 );
                                               }
@@ -668,5 +715,63 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
         </div>
       </ResizablePanel>
     </ResizablePanelGroup>
+
+    {/* Polaris full results modal */}
+    <Dialog open={!!polarisModalData} onOpenChange={() => setPolarisModalData(null)}>
+      <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-violet-700 dark:text-violet-400">
+              {polarisModalData?.label || "Polaris Lookup"}
+            </span>
+            {polarisModalData && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => exportPolarisCsv(polarisModalData.label, polarisModalData.entries)}
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export CSV
+              </Button>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+        {polarisModalData && (
+          <div className="overflow-y-auto flex-1 -mx-6 px-6">
+            <table className="w-full text-sm border-collapse">
+              <thead className="sticky top-0 bg-background z-10">
+                <tr className="border-b-2 border-violet-200 dark:border-violet-800">
+                  <th className="px-3 py-2 text-left font-semibold text-violet-600 dark:text-violet-400 w-36">Medewerker</th>
+                  <th className="px-3 py-2 text-left font-semibold text-violet-600 dark:text-violet-400 w-28">Code</th>
+                  <th className="px-3 py-2 text-left font-semibold text-violet-600 dark:text-violet-400">Vertaling</th>
+                </tr>
+              </thead>
+              <tbody>
+                {polarisModalData.entries.map(([key, signals]) =>
+                  signals.map((sig, si) => (
+                    <tr key={`${key}-${si}`} className={`border-b border-border/50 ${si === 0 ? '' : ''}`}>
+                      <td className="px-3 py-2 font-mono font-medium text-foreground whitespace-nowrap align-top">
+                        {si === 0 ? key : ''}
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <code className="bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded text-xs font-bold">{sig.code}</code>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground text-xs leading-relaxed">
+                        {sig.translation || <em className="text-amber-500">geen vertaling</em>}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            <div className="text-xs text-violet-500 font-medium py-3 text-center">
+              {polarisModalData.entries.length} medewerkers · {polarisModalData.entries.reduce((sum, [, s]) => sum + s.length, 0)} signalen
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
