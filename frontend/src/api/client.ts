@@ -275,9 +275,10 @@ export async function deleteControle(id: string): Promise<void> {
 
 export async function runControle(
   controleId: string,
-  files: Record<string, string>,
+  files: Record<string, string[]>,
+  filenames?: Record<string, string>,
 ): Promise<ExtractionResponse[]> {
-  const response = await api.post(`/controles/${controleId}/run`, { files });
+  const response = await api.post(`/controles/${controleId}/run`, { files, filenames: filenames ?? {} });
   return response.data;
 }
 
@@ -351,9 +352,10 @@ export async function deleteControleSeries(id: string): Promise<void> {
 
 export async function runControleSeries(
   seriesId: string,
-  files: Record<string, Record<string, string>>,
+  files: Record<string, Record<string, string[]>>,
+  filenames?: Record<string, string>,
 ): Promise<ControleSeriesRun> {
-  const response = await api.post(`/controle-series/${seriesId}/run`, { files });
+  const response = await api.post(`/controle-series/${seriesId}/run`, { files, filenames: filenames ?? {} });
   return response.data;
 }
 
@@ -367,7 +369,7 @@ export async function getControleSeriesRun(runId: string): Promise<ControleSerie
   return response.data;
 }
 
-// --- Translation Rules (Polaris) ---
+// --- Translation Rules (Signal Lookup) ---
 
 export async function listTranslationRules(): Promise<{ id: string; code: string; rapport: string; teamId: string; teamName: string; translation: string; lastModified: string }[]> {
   const { data } = await api.get("/translation-rules");
