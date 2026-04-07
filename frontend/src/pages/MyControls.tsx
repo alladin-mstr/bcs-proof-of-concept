@@ -466,16 +466,36 @@ export default function MyControls() {
                               </Select>
                             </TableCell>
                             <TableCell>
-                              <Input
-                                value={v.value}
-                                onChange={(e) => {
-                                  const vals = [...editingGroup.values];
-                                  vals[i] = { ...v, value: e.target.value };
-                                  setEditingGroup({ ...editingGroup, values: vals });
-                                }}
-                                placeholder="Waarde"
-                                className="h-8"
-                              />
+                              {v.dataType === "boolean" ? (
+                                <Select
+                                  value={v.value || "false"}
+                                  onValueChange={(val) => {
+                                    const vals = [...editingGroup.values];
+                                    vals[i] = { ...v, value: val };
+                                    setEditingGroup({ ...editingGroup, values: vals });
+                                  }}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="true">Waar</SelectItem>
+                                    <SelectItem value="false">Onwaar</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Input
+                                  type={v.dataType === "number" ? "number" : v.dataType === "date" ? "date" : "text"}
+                                  value={v.value}
+                                  onChange={(e) => {
+                                    const vals = [...editingGroup.values];
+                                    vals[i] = { ...v, value: e.target.value };
+                                    setEditingGroup({ ...editingGroup, values: vals });
+                                  }}
+                                  placeholder={v.dataType === "number" ? "0" : v.dataType === "date" ? "" : "Waarde"}
+                                  className="h-8"
+                                />
+                              )}
                             </TableCell>
                             <TableCell>
                               <Button

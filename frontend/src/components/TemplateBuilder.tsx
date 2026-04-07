@@ -399,7 +399,7 @@ function TemplateBuilder({ embedded = false }: { embedded?: boolean } = {}) {
                   )}
                   {/* Floating controls for embedded mode */}
                   {embedded && pdfId && templateMode !== 'comparison' && (
-                    <div className="sticky top-0 z-10 flex justify-center py-1.5">
+                    <div className="sticky top-0 z-20 flex justify-center py-1.5">
                       <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded-lg border border-border px-2 py-1 shadow-sm">
                         <button
                           onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}

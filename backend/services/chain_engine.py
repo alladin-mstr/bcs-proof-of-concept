@@ -666,6 +666,7 @@ def _execute_validate_step(step: ChainStep, ctx: ChainContext) -> None:
     # Map chain step to a Rule for reuse of existing validation logic
     rule_type_map = {
         "not_empty": "not_empty",
+        "empty": "empty",
         "exact_match": "exact_match",
         "data_type": "data_type",
         "range": "range",

@@ -29,7 +29,7 @@ CrossTemplateResolution = Literal["latest_run", "specific_run", "live"]
 
 class Rule(BaseModel):
     """A legacy field-level validation rule (kept for backward compatibility)."""
-    type: Literal["exact_match", "data_type", "range", "one_of", "pattern", "not_empty", "date_before", "date_after", "compare_field"]
+    type: Literal["exact_match", "data_type", "range", "one_of", "pattern", "not_empty", "empty", "date_before", "date_after", "compare_field"]
     expected_value: str | None = None
     data_type: DataType | None = None
     min_value: float | None = None
@@ -104,7 +104,7 @@ class PolarisConfig(BaseModel):
 
 class ValidationConfig(BaseModel):
     """Configuration for a validation rule."""
-    rule_type: Literal["exact_match", "data_type", "range", "one_of", "pattern", "not_empty", "date_before", "date_after", "compare_field"]
+    rule_type: Literal["exact_match", "data_type", "range", "one_of", "pattern", "not_empty", "empty", "date_before", "date_after", "compare_field"]
     operand_a: RuleOperand
     operand_b: RuleOperand | None = None
     operator: CompareOperator | None = None

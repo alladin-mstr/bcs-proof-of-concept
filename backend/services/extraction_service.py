@@ -112,6 +112,14 @@ def validate_rule(rule: Rule, value: str, all_values: dict[str, str] | None = No
             message="Value is present" if passed else "Value is empty",
         )
 
+    if rule.type == "empty":
+        passed = not bool(value.strip())
+        return RuleResult(
+            rule_type="empty",
+            passed=passed,
+            message="Value is empty" if passed else "Value is not empty",
+        )
+
     if rule.type == "exact_match":
         if rule.expected_value is None:
             return RuleResult(rule_type="exact_match", passed=False, message="No expected value configured")

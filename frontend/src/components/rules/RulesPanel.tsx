@@ -77,6 +77,7 @@ const NODE_MENU_ITEMS: {
   { type: 'comparison', label: 'Date After', group: 'Date', category: 'Logic', icon: <CalendarClock className={ICN} />, defaults: { comparisonOperator: 'date_after' } },
   { type: 'comparison', label: 'Date Between', group: 'Date', category: 'Logic', icon: <CalendarRange className={ICN} />, defaults: { comparisonOperator: 'date_between' } },
   { type: 'validation', label: 'Not Empty', category: 'Validate', icon: <Ban className="w-3.5 h-3.5" />, defaults: { validationRuleType: 'not_empty' } },
+  { type: 'validation', label: 'Empty', category: 'Validate', icon: <CircleOff className="w-3.5 h-3.5" />, defaults: { validationRuleType: 'empty' } },
   { type: 'validation', label: 'Exact Match', category: 'Validate', icon: <TextCursorInput className="w-3.5 h-3.5" />, defaults: { validationRuleType: 'exact_match' } },
   { type: 'validation', label: 'Data Type', category: 'Validate', icon: <FileType2 className="w-3.5 h-3.5" />, defaults: { validationRuleType: 'data_type' } },
   { type: 'validation', label: 'Range', category: 'Validate', icon: <Gauge className="w-3.5 h-3.5" />, defaults: { validationRuleType: 'range' } },

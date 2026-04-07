@@ -282,7 +282,7 @@ ComparisonNode.displayName = 'ComparisonNode';
 /* ── Validation ── */
 
 const RULE_LABELS: Record<string, string> = {
-  not_empty: 'Not Empty', exact_match: 'Exact Match', data_type: 'Data Type',
+  not_empty: 'Not Empty', empty: 'Empty', exact_match: 'Exact Match', data_type: 'Data Type',
   range: 'Range', one_of: 'One Of', pattern: 'Pattern',
   date_before: 'Before', date_after: 'After', compare_field: 'Compare',
 };

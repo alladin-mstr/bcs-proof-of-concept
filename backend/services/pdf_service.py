@@ -22,7 +22,17 @@ def _get_form_field_words(page, pw: float, ph: float) -> list[dict]:
         if isinstance(v, bytes):
             v = v.decode('utf-8', errors='replace')
         v = str(v).strip()
-        if not v or v in ('', 'Kies...'):
+        # PDF checkbox/radio values come as PDF name objects like /'Off', /'Yes', /'1'
+        if v.startswith("/'") and v.endswith("'"):
+            v = v[2:-1]  # strip /' and trailing '
+        elif v.startswith('/'):
+            v = v[1:]
+        # Map common checkbox states to readable values
+        if v.lower() in ('off', ''):
+            continue  # unchecked — skip
+        if v.lower() in ('yes', '1', 'on', 'true'):
+            v = 'Ja'
+        if not v or v in ('Kies...',):
             continue
         rect = data.get('Rect', [])
         if len(rect) < 4:

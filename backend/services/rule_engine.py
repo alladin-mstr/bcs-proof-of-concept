@@ -492,6 +492,13 @@ class RuleEngine:
                 passed=passed, message="Value is present" if passed else "Value is empty",
             )
 
+        if rt == "empty":
+            passed = not bool(a_value.strip())
+            return TemplateRuleResult(
+                rule_id=rule.id, rule_name=rule.name,
+                passed=passed, message="Value is empty" if passed else "Value is not empty",
+            )
+
         if rt == "exact_match":
             expected = val.expected_value or ""
             passed = a_value.strip() == expected.strip()
