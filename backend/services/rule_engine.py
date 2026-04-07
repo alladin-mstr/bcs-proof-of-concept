@@ -152,6 +152,7 @@ class RuleEngine:
         table_values: dict[str, list[dict[str, str]]] | None = None,
         cross_table_values: dict[str, dict[str, list[dict[str, str]]]] | None = None,
         series_context: dict[str, "ControleRunResult"] | None = None,
+        grid_data: dict[str, dict] | None = None,
     ):
         self.current_template_id = current_template_id
         self.values = extracted_values
@@ -160,6 +161,7 @@ class RuleEngine:
         self.table_values = table_values or {}
         self.cross_table_values = cross_table_values or {}
         self.series_context = series_context or {}
+        self.grid_data = grid_data or {}
 
     def resolve_operand(self, operand: RuleOperand) -> str | None:
         """Resolve an operand to its string value."""
@@ -194,6 +196,31 @@ class RuleEngine:
                 return ", ".join(col[:5]) + (f" ... ({len(col)} total)" if len(col) > 5 else "")
             return None
 
+        if operand.type == "formula":
+            from services.formula_engine import evaluate
+            ss_id = operand.spreadsheet_id
+            if ss_id and ss_id in self.grid_data:
+                try:
+                    return evaluate(operand.expression or "", self.grid_data[ss_id])
+                except Exception as e:
+                    return f"Error: {e}"
+            return None
+
+        if operand.type == "range_ref":
+            ss_id = operand.spreadsheet_id
+            rng = operand.range
+            if ss_id and rng and ss_id in self.grid_data:
+                grid = self.grid_data[ss_id]
+                values = []
+                for r in range(rng.startRow, rng.endRow + 1):
+                    for c in range(rng.startCol, rng.endCol + 1):
+                        if r < grid["row_count"] and c < grid["col_count"]:
+                            val = grid["rows"][r][c]
+                            if val is not None:
+                                values.append(str(val))
+                return ", ".join(values[:5]) + (f" ... ({len(values)} total)" if len(values) > 5 else "")
+            return None
+
         return None
 
     def resolve_column(self, operand: RuleOperand) -> list[str] | None:
@@ -217,6 +244,23 @@ class RuleEngine:
         # Local table lookup
         table_data = self.table_values.get(field_label, [])
         return [row.get(col, "") for row in table_data]
+
+    def resolve_range(self, operand: RuleOperand) -> list[str] | None:
+        """Resolve a range_ref operand to a list of cell values."""
+        if operand.type != "range_ref":
+            return None
+        ss_id = operand.spreadsheet_id
+        rng = operand.range
+        if not ss_id or not rng or ss_id not in self.grid_data:
+            return None
+        grid = self.grid_data[ss_id]
+        values = []
+        for r in range(rng.startRow, rng.endRow + 1):
+            for c in range(rng.startCol, rng.endCol + 1):
+                if r < grid["row_count"] and c < grid["col_count"]:
+                    val = grid["rows"][r][c]
+                    values.append(str(val) if val is not None else "")
+        return values
 
     def evaluate_computation(self, rule: TemplateRule) -> str | None:
         """Evaluate a computation rule and return result as string."""
@@ -256,28 +300,30 @@ class RuleEngine:
         # Handle aggregate operations (operate on column arrays)
         op = comp.operation
         if op in ("agg_sum", "agg_average", "agg_count", "agg_min", "agg_max"):
+            col_values = None
             if comp.operands and comp.operands[0].type == "column_ref":
                 col_values = self.resolve_column(comp.operands[0])
-                if col_values is None:
+            elif comp.operands and comp.operands[0].type == "range_ref":
+                col_values = self.resolve_range(comp.operands[0])
+            if col_values is None:
+                return None
+            if op == "agg_count":
+                result = float(len(col_values))
+            else:
+                nums = [n for v in col_values if (n := _parse_numeric(v)) is not None]
+                if not nums:
                     return None
-                if op == "agg_count":
-                    result = float(len(col_values))
+                if op == "agg_sum":
+                    result = sum(nums)
+                elif op == "agg_average":
+                    result = sum(nums) / len(nums)
+                elif op == "agg_min":
+                    result = min(nums)
+                elif op == "agg_max":
+                    result = max(nums)
                 else:
-                    nums = [n for v in col_values if (n := _parse_numeric(v)) is not None]
-                    if not nums:
-                        return None
-                    if op == "agg_sum":
-                        result = sum(nums)
-                    elif op == "agg_average":
-                        result = sum(nums) / len(nums)
-                    elif op == "agg_min":
-                        result = min(nums)
-                    elif op == "agg_max":
-                        result = max(nums)
-                    else:
-                        return None
-                return _format_result(result, comp.output_datatype)
-            return None
+                    return None
+            return _format_result(result, comp.output_datatype)
 
         # Handle row_filter operation
         if op == "row_filter":
