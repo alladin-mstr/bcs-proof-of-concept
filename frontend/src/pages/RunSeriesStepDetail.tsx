@@ -44,21 +44,36 @@ export default function RunSeriesStepDetail() {
         const allRules = details.flatMap((r) => r.template_rule_results);
         const allComputed = details.reduce((acc, r) => ({ ...acc, ...r.computed_values }), {} as Record<string, string>);
 
+        const guessFileType = (filename?: string): "pdf" | "spreadsheet" => {
+          if (!filename) return "pdf";
+          const ext = filename.split(".").pop()?.toLowerCase();
+          return ext === "xlsx" || ext === "xls" || ext === "csv" ? "spreadsheet" : "pdf";
+        };
+
         const groups: FileGroup[] = [];
         if (controle) {
-          // Track which details have been assigned to avoid duplicates
+          // Assign details to file defs: first try field-label matching, then sequential
           const usedDetailIndices = new Set<number>();
           for (const fileDef of controle.files) {
             const fileDefDetails: ExtractionResponse[] = [];
+            const fileDefFieldLabels = new Set(fileDef.fields.map((f) => f.label));
             for (let i = 0; i < details.length; i++) {
               if (usedDetailIndices.has(i)) continue;
-              // Match by checking if the detail has fields matching this file def's field labels
-              const fileDefFieldLabels = new Set(fileDef.fields.map((f) => f.label));
               const detailFieldLabels = new Set(details[i].results.map((r) => r.label));
               const hasOverlap = [...fileDefFieldLabels].some((l) => detailFieldLabels.has(l));
               if (hasOverlap) {
                 fileDefDetails.push(details[i]);
                 usedDetailIndices.add(i);
+              }
+            }
+            // If no match by labels, take the next unassigned detail
+            if (fileDefDetails.length === 0) {
+              for (let i = 0; i < details.length; i++) {
+                if (!usedDetailIndices.has(i)) {
+                  fileDefDetails.push(details[i]);
+                  usedDetailIndices.add(i);
+                  break;
+                }
               }
             }
             if (fileDefDetails.length > 0) {
@@ -90,7 +105,7 @@ export default function RunSeriesStepDetail() {
               return {
                 fileId: fr.pdf_id,
                 filename: fr.source_filename || "Bestand",
-                fileType: "pdf",
+                fileType: guessFileType(fr.source_filename),
                 results: fr.results,
                 ruleResults: fr.template_rule_results,
                 computedValues: fr.computed_values,
