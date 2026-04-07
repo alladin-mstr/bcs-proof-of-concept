@@ -177,18 +177,47 @@ export default function RunControle() {
       )}
 
       {phase === "results" && results && (() => {
+        // Match results to file defs: by uploaded file ID first, then by field label overlap
+        const usedResultIndices = new Set<number>();
         const fileGroups: FileGroup[] = controle.files.map((fileDef) => {
           const assigned = assignments[fileDef.id] ?? [];
-          const fileDefResults = results.filter((r) =>
+          let fileDefResults = results.filter((r) =>
             assigned.some((a) => a.id === r.pdf_id)
           );
+          // Mark matched results as used
+          fileDefResults.forEach((fr) => {
+            const idx = results.indexOf(fr);
+            if (idx >= 0) usedResultIndices.add(idx);
+          });
+          // Fallback: match by field label overlap (for spreadsheets where pdf_id differs)
+          if (fileDefResults.length === 0) {
+            const defFieldLabels = new Set(fileDef.fields.map((f) => f.label));
+            for (let i = 0; i < results.length; i++) {
+              if (usedResultIndices.has(i)) continue;
+              const resLabels = results[i].results.map((r) => r.label);
+              if (resLabels.some((l) => defFieldLabels.has(l))) {
+                fileDefResults.push(results[i]);
+                usedResultIndices.add(i);
+              }
+            }
+          }
+          // Final fallback: take next unmatched result
+          if (fileDefResults.length === 0) {
+            for (let i = 0; i < results.length; i++) {
+              if (!usedResultIndices.has(i)) {
+                fileDefResults.push(results[i]);
+                usedResultIndices.add(i);
+                break;
+              }
+            }
+          }
           return {
             label: fileDef.label,
             files: fileDefResults.map((fr) => {
               const passed = fr.results.filter((r) => r.status === "ok").length;
               return {
                 fileId: fr.pdf_id,
-                filename: fr.source_filename || "Bestand",
+                filename: fr.source_filename || fileDef.spreadsheetFilename || "Bestand",
                 fileType: fileDef.fileType,
                 results: fr.results,
                 ruleResults: fr.template_rule_results,
