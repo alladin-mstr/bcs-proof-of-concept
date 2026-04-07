@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, ComputedField, Controle, ControleRunResult, Klant } from "../types";
+import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, ComputedField, Controle, ControleRunResult, Klant, ControleSeries, ControleSeriesRun } from "../types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
@@ -246,4 +246,54 @@ export async function updateKlant(
 
 export async function deleteKlant(id: string): Promise<void> {
   await api.delete(`/klanten/${id}`);
+}
+
+// --- Controle Series ---
+
+export async function createControleSeries(
+  data: Omit<ControleSeries, "id" | "createdAt" | "updatedAt">,
+): Promise<ControleSeries> {
+  const response = await api.post("/controle-series", data);
+  return response.data;
+}
+
+export async function listControleSeries(klantId?: string): Promise<ControleSeries[]> {
+  const params = klantId ? { klantId } : {};
+  const response = await api.get("/controle-series", { params });
+  return response.data;
+}
+
+export async function getControleSeries(id: string): Promise<ControleSeries> {
+  const response = await api.get(`/controle-series/${id}`);
+  return response.data;
+}
+
+export async function updateControleSeries(
+  id: string,
+  data: Omit<ControleSeries, "id" | "createdAt" | "updatedAt">,
+): Promise<ControleSeries> {
+  const response = await api.put(`/controle-series/${id}`, data);
+  return response.data;
+}
+
+export async function deleteControleSeries(id: string): Promise<void> {
+  await api.delete(`/controle-series/${id}`);
+}
+
+export async function runControleSeries(
+  seriesId: string,
+  files: Record<string, Record<string, string>>,
+): Promise<ControleSeriesRun> {
+  const response = await api.post(`/controle-series/${seriesId}/run`, { files });
+  return response.data;
+}
+
+export async function listControleSeriesRuns(): Promise<ControleSeriesRun[]> {
+  const response = await api.get("/controle-series/runs/all");
+  return response.data;
+}
+
+export async function getControleSeriesRun(runId: string): Promise<ControleSeriesRun> {
+  const response = await api.get(`/controle-series/runs/${runId}`);
+  return response.data;
 }
