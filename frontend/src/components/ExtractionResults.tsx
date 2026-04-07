@@ -108,13 +108,18 @@ function Section({ title, icon, count, defaultOpen = true, variant = 'default', 
 
 // --- Field result cards ---
 
-function FieldResultCards({ results, templateMode }: { results: FieldResult[]; templateMode: string }) {
+function FieldResultCards({ results, templateMode, onFieldClick }: {
+  results: FieldResult[];
+  templateMode: string;
+  onFieldClick?: (fieldIndex: number) => void;
+}) {
   return (
     <div className="space-y-2">
       {results.map((r, i) => (
         <div
           key={i}
-          className={`rounded-md border p-2.5 ${
+          onClick={() => onFieldClick?.(i)}
+          className={`rounded-md border p-2.5 ${onFieldClick ? 'cursor-pointer hover:ring-1 hover:ring-primary/50' : ''} ${
             r.status === 'ok' ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/30 dark:bg-emerald-950/10' :
             r.status === 'anchor_shifted' ? 'border-blue-200 dark:border-blue-800/50 bg-blue-50/30 dark:bg-blue-950/10' :
             r.status === 'anchor_relocated' ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/30 dark:bg-amber-950/10' :
@@ -187,10 +192,25 @@ function FieldResultCards({ results, templateMode }: { results: FieldResult[]; t
 
 // --- Main component ---
 
-interface Props { onClose: () => void; embedded?: boolean; }
+interface Props {
+  onClose: () => void;
+  embedded?: boolean;
+  resultsOverride?: FieldResult[];
+  templateRuleResultsOverride?: TemplateRuleResult[];
+  computedValuesOverride?: Record<string, string>;
+  onFieldClick?: (fieldIndex: number) => void;
+}
 
-export default function ExtractionResults({ onClose, embedded = false }: Props) {
-  const results = useAppStore((s) => s.extractionResults);
+export default function ExtractionResults({
+  onClose,
+  embedded = false,
+  resultsOverride,
+  templateRuleResultsOverride,
+  computedValuesOverride,
+  onFieldClick,
+}: Props) {
+  const storeResults = useAppStore((s) => s.extractionResults);
+  const results = resultsOverride ?? storeResults;
   const templateMode = useAppStore((s) => s.templateMode);
   const pdfId = useAppStore((s) => s.pdfId);
   const pdfFilename = useAppStore((s) => s.pdfFilename);
@@ -198,8 +218,10 @@ export default function ExtractionResults({ onClose, embedded = false }: Props) 
   const templates = useAppStore((s) => s.templates);
   const addSavedTestRun = useAppStore((s) => s.addSavedTestRun);
   const setSavedTestRuns = useAppStore((s) => s.setSavedTestRuns);
-  const templateRuleResults = useAppStore((s) => s.templateRuleResults);
-  const computedValues = useAppStore((s) => s.computedValues);
+  const storeRuleResults = useAppStore((s) => s.templateRuleResults);
+  const templateRuleResults = templateRuleResultsOverride ?? storeRuleResults;
+  const storeComputedValues = useAppStore((s) => s.computedValues);
+  const computedValues = computedValuesOverride ?? storeComputedValues;
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -278,7 +300,7 @@ export default function ExtractionResults({ onClose, embedded = false }: Props) 
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          {!embedded && (
+          {!embedded && !resultsOverride && (
             <button
               onClick={handleSave}
               disabled={saving || saved}
@@ -303,11 +325,11 @@ export default function ExtractionResults({ onClose, embedded = false }: Props) 
         {/* Extracted Fields — no Section wrapper in embedded mode */}
         {embedded ? (
           <div className="mx-3 mt-3 space-y-2">
-            <FieldResultCards results={results} templateMode={templateMode} />
+            <FieldResultCards results={results} templateMode={templateMode} onFieldClick={onFieldClick} />
           </div>
         ) : (
           <Section title="Extracted Fields" icon={<FieldIcon />} count={results.length}>
-            <FieldResultCards results={results} templateMode={templateMode} />
+            <FieldResultCards results={results} templateMode={templateMode} onFieldClick={onFieldClick} />
           </Section>
         )}
 
