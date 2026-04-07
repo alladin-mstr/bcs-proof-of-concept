@@ -24,6 +24,13 @@ function operandFromNode(node: Node | undefined): RuleOperand | null {
   if (node.type === 'literal_input') {
     return { type: 'literal' as const, value: data.literalValue ?? '', datatype: data.literalDatatype };
   }
+  if (node.type === 'global_value_input') {
+    return {
+      type: 'global_value' as const,
+      global_group_id: data.globalGroupId ?? '',
+      global_value_id: data.globalValueId ?? '',
+    };
+  }
   if (node.type === 'table_column') {
     return {
       type: 'column_ref' as const,
@@ -89,6 +96,7 @@ function getOperandLabel(op: RuleOperand): string {
   if (op.type === 'field_ref') return op.ref?.field_label ?? '?';
   if (op.type === 'literal') return op.value ?? '?';
   if (op.type === 'computed_ref') return `[${op.computed_id?.slice(0, 6)}]`;
+  if (op.type === 'global_value') return `[global:${(op as any).global_value_id?.slice(0, 6)}]`;
   if (op.type === 'column_ref') return `${op.ref?.field_label ?? '?'}.${op.column_label}`;
   return '?';
 }
