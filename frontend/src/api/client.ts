@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, TemplateRuleResult, ComputedField, Controle, ControleFile, ControleRunResult, FieldResult, Klant, ControleSeries, ControleSeriesRun } from "../types";
+import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, TemplateRuleResult, ComputedField, Controle, ControleFile, ControleRunResult, FieldResult, Klant, ControleSeries, ControleSeriesRun, GlobalValueGroup } from "../types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
@@ -372,4 +372,35 @@ export async function getControleSeriesRun(runId: string): Promise<ControleSerie
 export async function listTranslationRules(): Promise<{ id: string; code: string; rapport: string; teamId: string; teamName: string; translation: string; lastModified: string }[]> {
   const { data } = await api.get("/translation-rules");
   return data;
+}
+
+// --- Global Values ---
+
+export async function listGlobalValueGroups(): Promise<GlobalValueGroup[]> {
+  const response = await api.get("/global-values");
+  return response.data;
+}
+
+export async function getGlobalValueGroup(id: string): Promise<GlobalValueGroup> {
+  const response = await api.get(`/global-values/${id}`);
+  return response.data;
+}
+
+export async function createGlobalValueGroup(
+  data: { name: string; values: GlobalValueGroup["values"] },
+): Promise<GlobalValueGroup> {
+  const response = await api.post("/global-values", data);
+  return response.data;
+}
+
+export async function updateGlobalValueGroup(
+  id: string,
+  data: { name: string; values: GlobalValueGroup["values"] },
+): Promise<GlobalValueGroup> {
+  const response = await api.put(`/global-values/${id}`, data);
+  return response.data;
+}
+
+export async function deleteGlobalValueGroup(id: string): Promise<void> {
+  await api.delete(`/global-values/${id}`);
 }
