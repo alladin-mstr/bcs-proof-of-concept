@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Play, Upload, Loader2, CheckCircle, XCircle, SkipForward,
-  AlertTriangle, FileText, RotateCcw,
+  Play, Loader2, CheckCircle, XCircle, SkipForward,
+  AlertTriangle, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,23 +12,27 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getControleSeries,
   getControle,
-  uploadPdf,
   runControleSeries,
 } from "@/api/client";
+import FileUploadManager from "@/components/FileUploadManager";
+import type { SlotDefinition } from "@/components/FileUploadManager";
 import type {
   ControleSeries,
   Controle,
-  ControleSeriesStep,
   ControleSeriesRun,
   SeriesStepResultStatus,
+  UploadedFile,
 } from "@/types";
 
 type Phase = "upload" | "running" | "results";
 
-interface StepUploadState {
-  step: ControleSeriesStep;
+interface StepInfo {
+  stepId: string;
+  order: number;
+  controleId: string;
+  controleName: string;
+  condition: string;
   controle: Controle | null;
-  files: Record<string, { pdfId: string; filename: string }>;
 }
 
 export default function RunSeries() {
@@ -37,76 +41,91 @@ export default function RunSeries() {
   const { toast } = useToast();
 
   const [series, setSeries] = useState<ControleSeries | null>(null);
-  const [stepStates, setStepStates] = useState<StepUploadState[]>([]);
+  const [stepInfos, setStepInfos] = useState<StepInfo[]>([]);
   const [phase, setPhase] = useState<Phase>("upload");
-  const [uploading, setUploading] = useState<string | null>(null);
+  const [assignments, setAssignments] = useState<Record<string, UploadedFile[]>>({});
+  const [pool, setPool] = useState<UploadedFile[]>([]);
   const [result, setResult] = useState<ControleSeriesRun | null>(null);
-  const [expandedStep, setExpandedStep] = useState<number>(0);
 
   useEffect(() => {
     if (!id) return;
     getControleSeries(id).then(async (s) => {
       setSeries(s);
       const sorted = [...s.steps].sort((a, b) => a.order - b.order);
-      const states: StepUploadState[] = [];
+      const infos: StepInfo[] = [];
       for (const step of sorted) {
         let controle: Controle | null = null;
         try {
           controle = await getControle(step.controleId);
         } catch { /* skip */ }
-        states.push({ step, controle, files: {} });
+        infos.push({
+          stepId: step.id,
+          order: step.order,
+          controleId: step.controleId,
+          controleName: step.controleName,
+          condition: step.condition,
+          controle,
+        });
       }
-      setStepStates(states);
+      setStepInfos(infos);
     }).catch(() => {
       toast({ title: "Serie niet gevonden", variant: "destructive" });
       navigate("/controles");
     });
   }, [id, toast, navigate]);
 
-  const handleUploadFile = useCallback(async (stepIdx: number, fileDefId: string, file: File) => {
-    if (file.type !== "application/pdf") return;
-    const key = `${stepIdx}_${fileDefId}`;
-    setUploading(key);
-    try {
-      const { pdf_id } = await uploadPdf(file);
-      setStepStates((prev) =>
-        prev.map((s, i) =>
-          i === stepIdx
-            ? { ...s, files: { ...s.files, [fileDefId]: { pdfId: pdf_id, filename: file.name } } }
-            : s,
-        ),
-      );
-    } catch {
-      toast({ title: "Upload mislukt", variant: "destructive" });
-    } finally {
-      setUploading(null);
-    }
-  }, [toast]);
+  const slots: SlotDefinition[] = [];
+  const conditionLabels: Record<string, string> = {
+    always: "Altijd",
+    if_passed: "Als vorige geslaagd",
+    if_failed: "Als vorige gefaald",
+  };
 
-  const allUploaded = stepStates.every(
-    (s) => s.controle?.files.every((f) => s.files[f.id]) ?? false,
-  );
+  for (const info of stepInfos) {
+    if (!info.controle) continue;
+    const condLabel = info.order > 1 ? ` [${conditionLabels[info.condition] ?? info.condition}]` : "";
+    const group = `Stap ${info.order}: ${info.controleName}${condLabel}`;
+    for (const fileDef of info.controle.files) {
+      slots.push({
+        key: `${info.stepId}_${fileDef.id}`,
+        label: fileDef.label,
+        group,
+        fileType: fileDef.fileType,
+      });
+    }
+  }
+
+  const allSlotsAssigned = slots.every((slot) => {
+    const assigned = assignments[slot.key];
+    return assigned && assigned.length > 0;
+  });
 
   const handleRun = useCallback(async () => {
-    if (!series || !allUploaded) return;
+    if (!series || !allSlotsAssigned) return;
     setPhase("running");
     try {
-      const files: Record<string, Record<string, string>> = {};
-      for (const s of stepStates) {
-        const stepFiles: Record<string, string> = {};
-        for (const [fileId, upload] of Object.entries(s.files)) {
-          stepFiles[fileId] = upload.pdfId;
+      const files: Record<string, Record<string, string[]>> = {};
+      const filenames: Record<string, string> = {};
+      for (const info of stepInfos) {
+        if (!info.controle) continue;
+        const stepFiles: Record<string, string[]> = {};
+        for (const fileDef of info.controle.files) {
+          const assigned = assignments[`${info.stepId}_${fileDef.id}`] ?? [];
+          stepFiles[fileDef.id] = assigned.map((f) => f.id);
+          for (const f of assigned) {
+            filenames[f.id] = f.filename;
+          }
         }
-        files[s.step.id] = stepFiles;
+        files[info.stepId] = stepFiles;
       }
-      const res = await runControleSeries(series.id, files);
+      const res = await runControleSeries(series.id, files, filenames);
       setResult(res);
       setPhase("results");
     } catch {
       toast({ title: "Uitvoeren mislukt", variant: "destructive" });
       setPhase("upload");
     }
-  }, [series, stepStates, allUploaded, toast]);
+  }, [series, stepInfos, assignments, allSlotsAssigned, toast]);
 
   const stepStatusIcon = (status: SeriesStepResultStatus) => {
     switch (status) {
@@ -115,12 +134,6 @@ export default function RunSeries() {
       case "skipped": return <SkipForward className="h-5 w-5 text-muted-foreground" />;
       case "error": return <AlertTriangle className="h-5 w-5 text-red-500" />;
     }
-  };
-
-  const conditionLabels = {
-    always: "Altijd",
-    if_passed: "Als vorige geslaagd",
-    if_failed: "Als vorige gefaald",
   };
 
   if (!series) {
@@ -138,7 +151,8 @@ export default function RunSeries() {
             onClick={() => {
               setPhase("upload");
               setResult(null);
-              setStepStates((prev) => prev.map((s) => ({ ...s, files: {} })));
+              setAssignments({});
+              setPool([]);
             }}
           >
             <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
@@ -154,90 +168,21 @@ export default function RunSeries() {
         </p>
       </div>
 
-      {/* Upload phase */}
       {phase === "upload" && (
         <div className="space-y-6">
-          {stepStates.map((state, stepIdx) => {
-            const isExpanded = expandedStep === stepIdx;
-            const stepComplete = state.controle?.files.every((f) => state.files[f.id]) ?? false;
-            return (
-              <Card key={state.step.id} className={stepComplete ? "border-green-200 dark:border-green-800" : ""}>
-                <CardContent className="p-4 space-y-3">
-                  <div
-                    className="flex items-center gap-3 cursor-pointer"
-                    onClick={() => setExpandedStep(isExpanded ? -1 : stepIdx)}
-                  >
-                    <span className="text-xs font-bold text-muted-foreground bg-muted rounded-full h-6 w-6 flex items-center justify-center shrink-0">
-                      {stepIdx + 1}
-                    </span>
-                    <span className="font-medium flex-1">{state.step.controleName}</span>
-                    {stepIdx > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        {conditionLabels[state.step.condition]}
-                      </Badge>
-                    )}
-                    {stepComplete && <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />}
-                  </div>
-                  {isExpanded && state.controle && (
-                    <div className="pl-9 space-y-2">
-                      {state.controle.files.map((fileDef) => {
-                        const upload = state.files[fileDef.id];
-                        const isUpl = uploading === `${stepIdx}_${fileDef.id}`;
-                        return (
-                          <div
-                            key={fileDef.id}
-                            className={`flex items-center gap-3 p-3 rounded-lg border ${
-                              upload ? "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/10" : "border-dashed"
-                            }`}
-                          >
-                            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium">{fileDef.label}</p>
-                              {upload && <p className="text-xs text-green-600">{upload.filename}</p>}
-                            </div>
-                            {isUpl ? (
-                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                            ) : (
-                              <Button
-                                variant={upload ? "ghost" : "outline"}
-                                size="sm"
-                                onClick={() => {
-                                  const input = document.createElement("input");
-                                  input.type = "file";
-                                  input.accept = "application/pdf";
-                                  input.onchange = (e) => {
-                                    const file = (e.target as HTMLInputElement).files?.[0];
-                                    if (file) handleUploadFile(stepIdx, fileDef.id, file);
-                                  };
-                                  input.click();
-                                }}
-                              >
-                                {upload ? "Wijzig" : (
-                                  <>
-                                    <Upload className="h-3.5 w-3.5 mr-1" />
-                                    PDF
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+          <FileUploadManager
+            slots={slots}
+            onAssignmentsChange={setAssignments}
+            onPoolChange={setPool}
+          />
 
-          <Button size="lg" className="w-full" disabled={!allUploaded} onClick={handleRun}>
+          <Button size="lg" className="w-full" disabled={!allSlotsAssigned} onClick={handleRun}>
             <Play className="h-4 w-4 mr-2" />
             Serie uitvoeren
           </Button>
         </div>
       )}
 
-      {/* Running phase */}
       {phase === "running" && (
         <div className="py-16 flex flex-col items-center justify-center text-center">
           <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
@@ -248,7 +193,6 @@ export default function RunSeries() {
         </div>
       )}
 
-      {/* Results phase */}
       {phase === "results" && result && (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
