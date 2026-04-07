@@ -67,7 +67,8 @@ async def remove_controle(controle_id: str):
 
 
 class RunControleRequest(BaseModel):
-    files: dict[str, str]  # file_id -> pdf_id
+    files: dict[str, list[str] | str]  # file_id -> [pdf_id, ...] or pdf_id (backward compat)
+    filenames: dict[str, str] = {}  # pdf_id -> filename (optional, for display)
 
 
 @router.post("/{controle_id}/run", response_model=list[ExtractionResponse])
@@ -81,7 +82,18 @@ async def run_controle(controle_id: str, data: RunControleRequest):
     storage = get_storage()
     responses: list[ExtractionResponse] = []
 
+    # Normalize: wrap single strings in lists for backward compatibility
+    normalized_files: dict[str, list[str]] = {}
+    for key, val in data.files.items():
+        if isinstance(val, str):
+            normalized_files[key] = [val]
+        else:
+            normalized_files[key] = val
+
     import json as _json
+
+    from services.translation_rules_store import get_translation_rules_dict
+    translation_rules = get_translation_rules_dict()
 
     # Load spreadsheet grid data for any spreadsheet files
     grid_data: dict[str, dict] = {}
@@ -91,17 +103,16 @@ async def run_controle(controle_id: str, data: RunControleRequest):
             if grid_json:
                 grid_data[file_def.spreadsheetId] = _json.loads(grid_json)
 
-    from services.translation_rules_store import get_translation_rules_dict
-    translation_rules = get_translation_rules_dict()
-
     # Collect all fields across files for combined rule evaluation
     all_fields = []
     for file_def in controle.files:
         all_fields.extend(file_def.fields)
 
     for file_def in controle.files:
+        is_first_file_def = file_def.id == controle.files[0].id
+
         if file_def.fileType == "spreadsheet":
-            # Resolve spreadsheet fields directly from grid
+            # Spreadsheet files: single extraction from controle definition
             ss_id = file_def.spreadsheetId
             grid = grid_data.get(ss_id) if ss_id else None
             field_results = []
@@ -132,10 +143,9 @@ async def run_controle(controle_id: str, data: RunControleRequest):
                     step_traces=[],
                 ))
 
-            # Run rules for first file
             rule_results_list = []
             computed_values: dict[str, str] = {}
-            if file_def.id == controle.files[0].id and controle.rules:
+            if is_first_file_def and controle.rules:
                 from services.rule_engine import RuleEngine
                 engine = RuleEngine(
                     current_template_id=controle_id,
@@ -147,6 +157,7 @@ async def run_controle(controle_id: str, data: RunControleRequest):
                     controle.rules, controle.computedFields
                 )
 
+            ss_filename = file_def.spreadsheetFilename or (ss_id or "")
             responses.append(ExtractionResponse(
                 pdf_id=ss_id or "",
                 template_id=controle_id,
@@ -154,36 +165,42 @@ async def run_controle(controle_id: str, data: RunControleRequest):
                 needs_review=any(r.status != "ok" for r in field_results),
                 template_rule_results=rule_results_list,
                 computed_values=computed_values,
+                source_filename=ss_filename,
             ))
             continue
 
-        # Existing PDF handling below (unchanged)
-        pdf_id = data.files.get(file_def.id)
-        if not pdf_id:
+        # PDF handling: loop over all provided pdf_ids for this file_def
+        pdf_ids = normalized_files.get(file_def.id, [])
+        if not pdf_ids:
             raise HTTPException(
                 status_code=400,
                 detail=f"Missing PDF for file '{file_def.label}' (id: {file_def.id}).",
             )
-        if not storage.pdf_exists(pdf_id):
-            raise HTTPException(status_code=404, detail=f"PDF {pdf_id} not found.")
 
-        with storage.pdf_temp_path(pdf_id) as pdf_path:
-            field_results, rule_results, computed_values = extract_all_fields(
-                pdf_path=pdf_path,
-                fields=file_def.fields,
-                template_rules=controle.rules if file_def.id == controle.files[0].id else [],
-                computed_fields=controle.computedFields if file_def.id == controle.files[0].id else [],
+        for pdf_id in pdf_ids:
+            if not storage.pdf_exists(pdf_id):
+                raise HTTPException(status_code=404, detail=f"PDF {pdf_id} not found.")
+
+            pdf_filename = data.filenames.get(pdf_id, pdf_id)
+
+            with storage.pdf_temp_path(pdf_id) as pdf_path:
+                field_results, rule_results, computed_values = extract_all_fields(
+                    pdf_path=pdf_path,
+                    fields=file_def.fields,
+                    template_rules=controle.rules if is_first_file_def else [],
+                    computed_fields=controle.computedFields if is_first_file_def else [],
+                    template_id=controle_id,
+                )
+
+            responses.append(ExtractionResponse(
+                pdf_id=pdf_id,
                 template_id=controle_id,
-            )
-
-        responses.append(ExtractionResponse(
-            pdf_id=pdf_id,
-            template_id=controle_id,
-            results=field_results,
-            needs_review=any(r.status != "ok" for r in field_results),
-            template_rule_results=rule_results,
-            computed_values=computed_values,
-        ))
+                results=field_results,
+                needs_review=any(r.status != "ok" for r in field_results),
+                template_rule_results=rule_results,
+                computed_values=computed_values,
+                source_filename=pdf_filename,
+            ))
 
     # Persist run result
     total_fields = sum(len(r.results) for r in responses)
@@ -193,11 +210,9 @@ async def run_controle(controle_id: str, data: RunControleRequest):
 
     status = "success" if passed_fields == total_fields and rules_passed == len(all_rule_results) else "review" if passed_fields > 0 else "error"
 
-    # Collect extracted field entries for reuse in rules
     entries: list[TestRunEntry] = []
-    for i, r in enumerate(responses):
-        file_label = controle.files[i].label if i < len(controle.files) else f"File {i+1}"
-        prefix = f"{file_label} → " if len(controle.files) > 1 else ""
+    for r in responses:
+        prefix = f"{r.source_filename} → " if r.source_filename and len(responses) > 1 else ""
         for fr in r.results:
             entries.append(TestRunEntry(
                 label=f"{prefix}{fr.label}",
@@ -205,7 +220,7 @@ async def run_controle(controle_id: str, data: RunControleRequest):
                 status=fr.status,
                 table_data=fr.table_data,
             ))
-    for key, val in responses[0].computed_values.items() if responses else []:
+    for key, val in (responses[0].computed_values.items() if responses else []):
         entries.append(TestRunEntry(label=key, value=str(val), status="computed"))
 
     run_result = ControleRunResult(
@@ -222,7 +237,7 @@ async def run_controle(controle_id: str, data: RunControleRequest):
         rulesTotal=len(all_rule_results),
         fileResults=[
             {
-                "fileLabel": controle.files[i].label if i < len(controle.files) else f"File {i+1}",
+                "fileLabel": r.source_filename or f"File {i+1}",
                 "passed": len([f for f in r.results if f.status == "ok"]),
                 "total": len(r.results),
             }
