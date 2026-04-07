@@ -4,6 +4,7 @@ Evaluates TemplateRule objects (validations + computations) after field extracti
 Supports cross-template field references via test runs or live extraction.
 """
 
+import json
 import re
 from functools import reduce
 from models.schemas import (
@@ -403,8 +404,7 @@ class RuleEngine:
                 if key_val not in grouped:
                     grouped[key_val] = []
                 grouped[key_val].append({"code": sig_val, "translation": translation})
-            import json as _json
-            return _json.dumps(grouped, ensure_ascii=False)
+            return json.dumps(grouped, ensure_ascii=False)
 
         # Resolve operands
         raw_values = [self.resolve_operand(op) for op in comp.operands]

@@ -78,7 +78,7 @@ export interface ValidationConfig {
 }
 
 export interface ComputationConfig {
-  operation: MathOperation | AggregateOperation;
+  operation: MathOperation | AggregateOperation | "row_filter" | "polaris_lookup";
   operands: RuleOperand[];
   output_label: string;
   output_datatype?: DataType;

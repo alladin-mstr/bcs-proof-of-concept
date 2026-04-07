@@ -285,7 +285,7 @@ export function serializeGraph(
         type: 'computation',
         enabled: true,
         computation: {
-          operation: 'row_filter' as MathOperation,
+          operation: 'row_filter',
           operands: [colOp],
           output_label: name,
           output_datatype: data.outputDatatype,
@@ -443,7 +443,7 @@ export function serializeGraph(
         type: 'computation',
         enabled: true,
         computation: {
-          operation: 'polaris_lookup' as MathOperation,
+          operation: 'polaris_lookup',
           operands: [],
           output_label: name,
           polaris_config: {
