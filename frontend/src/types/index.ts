@@ -53,7 +53,8 @@ export type RuleOperand =
   | { type: "computed_ref"; computed_id: string }
   | { type: "column_ref"; ref: FieldRef; column_label: string }
   | { type: "formula"; expression: string; spreadsheet_id: string }
-  | { type: "range_ref"; spreadsheet_id: string; range: CellRange };
+  | { type: "range_ref"; spreadsheet_id: string; range: CellRange }
+  | { type: "global_value"; global_group_id: string; global_value_id: string };
 
 export interface Condition {
   operand_a: RuleOperand;
@@ -114,7 +115,7 @@ export interface TemplateRuleResult {
 
 // --- React Flow node types for Rules editor ---
 
-export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter" | "formula" | "cell_range" | "polaris_lookup";
+export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter" | "formula" | "cell_range" | "polaris_lookup" | "global_value_input";
 
 export interface RuleNodeData {
   label: string;
@@ -161,6 +162,11 @@ export interface RuleNodeData {
   // Last evaluated value (for display)
   lastValue?: string;
   lastPassed?: boolean;
+  // Global value reference
+  globalGroupId?: string;
+  globalValueId?: string;
+  groupName?: string;
+  globalDataType?: "text" | "number" | "date" | "boolean";
 }
 
 // --- Chain step types ---
@@ -454,4 +460,22 @@ export interface ControleSeriesRun {
   status: SeriesRunStatus;
   stepResults: ControleSeriesStepResult[];
   runAt: string;
+}
+
+// --- Global Values ---
+
+export interface GlobalValue {
+  id: string;
+  name: string;
+  dataType: "text" | "number" | "date" | "boolean";
+  value: string;
+}
+
+export interface GlobalValueGroup {
+  id: string;
+  name: string;
+  version: number;
+  values: GlobalValue[];
+  createdAt: string;
+  updatedAt: string;
 }
