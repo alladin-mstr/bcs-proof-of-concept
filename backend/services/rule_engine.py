@@ -224,6 +224,16 @@ class RuleEngine:
                 return ", ".join(values[:5]) + (f" ... ({len(values)} total)" if len(values) > 5 else "")
             return None
 
+        if operand.type == "global_value":
+            from services.global_value_store import get_global_value_group
+            if operand.global_group_id:
+                group = get_global_value_group(operand.global_group_id)
+                if group:
+                    for gv in group.values:
+                        if gv.id == operand.global_value_id:
+                            return gv.value
+            return None
+
         return None
 
     def resolve_column(self, operand: RuleOperand) -> list[str] | None:
