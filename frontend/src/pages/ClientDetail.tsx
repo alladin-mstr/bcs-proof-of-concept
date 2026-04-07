@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { Plus, CheckCircle, AlertTriangle, ChevronRight, FileText, Clock, Pencil, Play } from "lucide-react";
+import { Plus, CheckCircle, AlertTriangle, ChevronRight, FileText, Clock, Pencil, Play, Layers } from "lucide-react";
 import { HeaderAction } from "@/context/HeaderActionContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getKlant, listControles, listControleRuns } from "@/api/client";
-import type { Klant, Controle, ControleRunResult } from "@/types";
+import { getKlant, listControles, listControleRuns, listControleSeries } from "@/api/client";
+import type { Klant, Controle, ControleRunResult, ControleSeries } from "@/types";
 
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -14,6 +14,7 @@ export default function ClientDetail() {
   const [client, setClient] = useState<Klant | null>(null);
   const [controles, setControles] = useState<Controle[]>([]);
   const [controlRuns, setControlRuns] = useState<ControleRunResult[]>([]);
+  const [series, setSeries] = useState<ControleSeries[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,11 +23,13 @@ export default function ClientDetail() {
       getKlant(clientId),
       listControles(),
       listControleRuns(),
+      listControleSeries(clientId),
     ])
-      .then(([klant, allControles, allRuns]) => {
+      .then(([klant, allControles, allRuns, klantSeries]) => {
         setClient(klant);
         setControles(allControles.filter((c) => c.klantId === clientId));
         setControlRuns(allRuns.filter((r) => r.klantId === clientId));
+        setSeries(klantSeries);
       })
       .catch(() => setClient(null))
       .finally(() => setLoading(false));
@@ -153,6 +156,42 @@ export default function ClientDetail() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Series for this klant */}
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle>Series</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {series.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p className="text-sm">Nog geen series voor deze klant</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {series.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border"
+                  onClick={() => navigate(`/controle-series/${s.id}`)}
+                >
+                  <div className="flex items-center gap-4">
+                    <Layers className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <span className="font-medium">{s.name}</span>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                        <span>{s.steps.length} stappen</span>
+                        <span>{formatDate(s.createdAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
