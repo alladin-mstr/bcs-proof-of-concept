@@ -134,6 +134,23 @@ class StorageBackend(ABC):
     @abstractmethod
     def list_controle_series_run_ids(self) -> list[str]: ...
 
+    # -- Spreadsheets --
+
+    @abstractmethod
+    def upload_spreadsheet(self, spreadsheet_id: str, content: bytes) -> None: ...
+
+    @abstractmethod
+    def spreadsheet_exists(self, spreadsheet_id: str) -> bool: ...
+
+    @abstractmethod
+    def delete_spreadsheet(self, spreadsheet_id: str) -> None: ...
+
+    @abstractmethod
+    def save_spreadsheet_grid(self, spreadsheet_id: str, grid_json: str) -> None: ...
+
+    @abstractmethod
+    def get_spreadsheet_grid(self, spreadsheet_id: str) -> str | None: ...
+
 
 class LocalStorageBackend(StorageBackend):
     """Filesystem-backed storage (current behaviour)."""
@@ -150,6 +167,7 @@ class LocalStorageBackend(StorageBackend):
         self._klanten = base_dir / "klanten"
         self._controle_series = base_dir / "controle_series"
         self._controle_series_runs = base_dir / "controle_series_runs"
+        self._spreadsheets = base_dir / "spreadsheets"
         self._uploads.mkdir(parents=True, exist_ok=True)
         self._templates.mkdir(parents=True, exist_ok=True)
         self._test_runs.mkdir(parents=True, exist_ok=True)
@@ -158,6 +176,7 @@ class LocalStorageBackend(StorageBackend):
         self._klanten.mkdir(parents=True, exist_ok=True)
         self._controle_series.mkdir(parents=True, exist_ok=True)
         self._controle_series_runs.mkdir(parents=True, exist_ok=True)
+        self._spreadsheets.mkdir(parents=True, exist_ok=True)
 
     # -- PDFs --
 
@@ -320,11 +339,38 @@ class LocalStorageBackend(StorageBackend):
     def list_controle_series_run_ids(self) -> list[str]:
         return [p.stem for p in sorted(self._controle_series_runs.glob("*.json"))]
 
+    # -- Spreadsheets --
+
+    def upload_spreadsheet(self, spreadsheet_id: str, content: bytes) -> None:
+        self._spreadsheets.mkdir(exist_ok=True)
+        (self._spreadsheets / f"{spreadsheet_id}.xlsx").write_bytes(content)
+
+    def spreadsheet_exists(self, spreadsheet_id: str) -> bool:
+        return (self._spreadsheets / f"{spreadsheet_id}.xlsx").exists()
+
+    def delete_spreadsheet(self, spreadsheet_id: str) -> None:
+        path = self._spreadsheets / f"{spreadsheet_id}.xlsx"
+        if path.exists():
+            path.unlink()
+        grid_path = self._spreadsheets / f"{spreadsheet_id}.grid.json"
+        if grid_path.exists():
+            grid_path.unlink()
+
+    def save_spreadsheet_grid(self, spreadsheet_id: str, grid_json: str) -> None:
+        self._spreadsheets.mkdir(exist_ok=True)
+        (self._spreadsheets / f"{spreadsheet_id}.grid.json").write_text(grid_json)
+
+    def get_spreadsheet_grid(self, spreadsheet_id: str) -> str | None:
+        path = self._spreadsheets / f"{spreadsheet_id}.grid.json"
+        if path.exists():
+            return path.read_text()
+        return None
+
 
 class AzureBlobStorageBackend(StorageBackend):
     """Azure Blob Storage backend using DefaultAzureCredential."""
 
-    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs", controles_container: str = "controles", controle_runs_container: str = "controle-runs", klanten_container: str = "klanten", controle_series_container: str = "controle-series", controle_series_runs_container: str = "controle-series-runs"):
+    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs", controles_container: str = "controles", controle_runs_container: str = "controle-runs", klanten_container: str = "klanten", controle_series_container: str = "controle-series", controle_series_runs_container: str = "controle-series-runs", spreadsheets_container: str = "spreadsheets"):
         from azure.identity import DefaultAzureCredential
         from azure.storage.blob import BlobServiceClient
 
@@ -339,8 +385,9 @@ class AzureBlobStorageBackend(StorageBackend):
         self._klanten = self._client.get_container_client(klanten_container)
         self._controle_series = self._client.get_container_client(controle_series_container)
         self._controle_series_runs = self._client.get_container_client(controle_series_runs_container)
+        self._spreadsheets = self._client.get_container_client(spreadsheets_container)
         # Ensure all containers exist
-        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs, self._klanten, self._controle_series, self._controle_series_runs]:
+        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs, self._klanten, self._controle_series, self._controle_series_runs, self._spreadsheets]:
             if not container.exists():
                 container.create_container()
 
@@ -559,6 +606,32 @@ class AzureBlobStorageBackend(StorageBackend):
             if name.endswith(".json"):
                 ids.append(name.removesuffix(".json"))
         return sorted(ids)
+
+    # -- Spreadsheets --
+
+    def upload_spreadsheet(self, spreadsheet_id: str, content: bytes) -> None:
+        self._spreadsheets.upload_blob(f"{spreadsheet_id}.xlsx", content, overwrite=True)
+
+    def spreadsheet_exists(self, spreadsheet_id: str) -> bool:
+        blob_client = self._spreadsheets.get_blob_client(f"{spreadsheet_id}.xlsx")
+        return blob_client.exists()
+
+    def delete_spreadsheet(self, spreadsheet_id: str) -> None:
+        xlsx_client = self._spreadsheets.get_blob_client(f"{spreadsheet_id}.xlsx")
+        if xlsx_client.exists():
+            xlsx_client.delete_blob()
+        grid_client = self._spreadsheets.get_blob_client(f"{spreadsheet_id}.grid.json")
+        if grid_client.exists():
+            grid_client.delete_blob()
+
+    def save_spreadsheet_grid(self, spreadsheet_id: str, grid_json: str) -> None:
+        self._spreadsheets.upload_blob(f"{spreadsheet_id}.grid.json", grid_json, overwrite=True)
+
+    def get_spreadsheet_grid(self, spreadsheet_id: str) -> str | None:
+        blob_client = self._spreadsheets.get_blob_client(f"{spreadsheet_id}.grid.json")
+        if not blob_client.exists():
+            return None
+        return blob_client.download_blob().readall().decode("utf-8")
 
 
 # -- Singleton --
