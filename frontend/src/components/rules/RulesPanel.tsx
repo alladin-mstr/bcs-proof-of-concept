@@ -98,11 +98,11 @@ const NODE_MENU_ITEMS: {
   // Spreadsheet
   { type: 'formula', label: 'Formula', category: 'Spreadsheet', icon: <Sigma className={ICN} />, defaults: { formulaExpression: '' } },
   { type: 'cell_range', label: 'Cell Range', category: 'Spreadsheet', icon: <BarChart3 className={ICN} />, defaults: { rangeExpression: '' } },
-  // Polaris
-  { type: 'polaris_lookup', label: 'Signal Lookup', category: 'Polaris', icon: <Search className={ICN} /> },
+  // Signal
+  { type: 'polaris_lookup', label: 'Signal Lookup', category: 'Signal', icon: <Search className={ICN} /> },
 ];
 
-const CATEGORIES = ['Input', 'Math', 'Logic', 'Validate', 'Conditionals', 'Table', 'Spreadsheet', 'Polaris'];
+const CATEGORIES = ['Input', 'Math', 'Logic', 'Validate', 'Conditionals', 'Table', 'Spreadsheet', 'Signal'];
 
 const CATEGORY_COLORS: Record<string, string> = {
   Input: 'text-slate-600 dark:text-slate-400',
@@ -112,7 +112,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Conditionals: 'text-orange-600 dark:text-orange-400',
   Table: 'text-teal-600 dark:text-teal-400',
   Spreadsheet: 'text-green-600 dark:text-green-400',
-  Polaris: 'text-violet-600 dark:text-violet-400',
+  Signal: 'text-violet-600 dark:text-violet-400',
 };
 
 export default function RulesPanel() {
@@ -220,7 +220,7 @@ export default function RulesPanel() {
   const visibleCategories = useMemo(() => {
     const hasSpreadsheet = wizardControle?.files.some((f) => f.fileType === "spreadsheet");
     if (hasSpreadsheet) return CATEGORIES;
-    return CATEGORIES.filter((c) => c !== 'Spreadsheet' && c !== 'Polaris');
+    return CATEGORIES.filter((c) => c !== 'Spreadsheet' && c !== 'Signal');
   }, [wizardControle]);
 
   useEffect(() => {
