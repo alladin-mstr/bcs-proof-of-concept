@@ -119,6 +119,59 @@ export async function getPageWords(pdfId: string, page: number): Promise<WordInf
   return response.data.words;
 }
 
+// --- Spreadsheets ---
+
+export interface SpreadsheetUploadResponse {
+  spreadsheet_id: string;
+  filename: string;
+  headers: string[];
+  rows: (string | number | boolean | null)[][];
+  row_count: number;
+  col_count: number;
+}
+
+export async function uploadSpreadsheet(
+  file: File,
+): Promise<SpreadsheetUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post("/spreadsheets/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+}
+
+export async function getSpreadsheet(
+  spreadsheetId: string,
+): Promise<SpreadsheetUploadResponse> {
+  const response = await api.get(`/spreadsheets/${spreadsheetId}`);
+  return response.data;
+}
+
+export async function getSpreadsheetCell(
+  spreadsheetId: string,
+  col: number,
+  row: number,
+): Promise<{ value: string | number | boolean | null }> {
+  const response = await api.get(`/spreadsheets/${spreadsheetId}/cell`, {
+    params: { col, row },
+  });
+  return response.data;
+}
+
+export async function getSpreadsheetRange(
+  spreadsheetId: string,
+  startCol: number,
+  startRow: number,
+  endCol: number,
+  endRow: number,
+): Promise<{ values: (string | number | boolean | null)[][] }> {
+  const response = await api.get(`/spreadsheets/${spreadsheetId}/range`, {
+    params: { startCol, startRow, endCol, endRow },
+  });
+  return response.data;
+}
+
 // Test extraction with current fields (no saved template needed)
 export async function testExtraction(
   pdfId: string,
