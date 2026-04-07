@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Play, Loader2, CheckCircle, XCircle, SkipForward,
-  AlertTriangle, RotateCcw,
+  AlertTriangle, RotateCcw, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -208,28 +208,38 @@ export default function RunSeries() {
             </Badge>
           </div>
 
-          {result.stepResults.map((sr, idx) => (
-            <Card key={sr.stepId}>
-              <CardContent className="p-4 flex items-center gap-3">
-                <span className="text-xs font-bold text-muted-foreground bg-muted rounded-full h-6 w-6 flex items-center justify-center shrink-0">
-                  {idx + 1}
-                </span>
-                {stepStatusIcon(sr.status)}
-                <span className="font-medium flex-1">{sr.controleName}</span>
-                <Badge
-                  variant="outline"
-                  className={`text-xs ${
-                    sr.status === "passed" ? "text-success border-success/30 bg-success/10"
-                    : sr.status === "failed" ? "text-destructive border-destructive/30 bg-destructive/10"
-                    : sr.status === "skipped" ? "text-muted-foreground"
-                    : "text-destructive border-destructive/30 bg-destructive/10"
-                  }`}
-                >
-                  {sr.status === "passed" ? "Geslaagd" : sr.status === "failed" ? "Gefaald" : sr.status === "skipped" ? "Overgeslagen" : "Fout"}
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
+          {result.stepResults.map((sr, idx) => {
+            const isClickable = sr.status === "passed" || sr.status === "failed";
+            return (
+              <Card
+                key={sr.stepId}
+                className={isClickable ? "cursor-pointer hover:border-primary/50 transition-colors" : ""}
+                onClick={isClickable ? () => navigate(`/controle-series/${id}/run/${result.id}/step/${sr.stepId}`) : undefined}
+              >
+                <CardContent className="p-4 flex items-center gap-3">
+                  <span className="text-xs font-bold text-muted-foreground bg-muted rounded-full h-6 w-6 flex items-center justify-center shrink-0">
+                    {idx + 1}
+                  </span>
+                  {stepStatusIcon(sr.status)}
+                  <span className="font-medium flex-1">{sr.controleName}</span>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${
+                      sr.status === "passed" ? "text-success border-success/30 bg-success/10"
+                      : sr.status === "failed" ? "text-destructive border-destructive/30 bg-destructive/10"
+                      : sr.status === "skipped" ? "text-muted-foreground"
+                      : "text-destructive border-destructive/30 bg-destructive/10"
+                    }`}
+                  >
+                    {sr.status === "passed" ? "Geslaagd" : sr.status === "failed" ? "Gefaald" : sr.status === "skipped" ? "Overgeslagen" : "Fout"}
+                  </Badge>
+                  {isClickable && (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
