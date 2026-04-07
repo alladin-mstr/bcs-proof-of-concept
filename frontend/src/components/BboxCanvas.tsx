@@ -44,7 +44,15 @@ function getResultColor(status: FieldResult['status']) {
   }
 }
 
-interface Props { pageWidth: number; pageHeight: number; source?: "a" | "b" }
+interface Props {
+  pageWidth: number;
+  pageHeight: number;
+  source?: "a" | "b";
+  readOnly?: boolean;
+  resultsOverride?: FieldResult[];
+  fieldsOverride?: Field[];
+  currentPageOverride?: number;
+}
 
 function pixelRectToRegion(rect: { x: number; y: number; width: number; height: number }, page: number, pw: number, ph: number): Region {
   const tl = pixelToNormalized(rect.x, rect.y, pw, ph);
@@ -58,16 +66,18 @@ function regionCenter(region: Region, pw: number, ph: number) {
   return { cx: p.x + d.x / 2, cy: p.y + d.y / 2 };
 }
 
-export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
-  const currentPage = useAppStore((s) => source === 'b' ? s.currentPageB : s.currentPage);
-  const fields = useAppStore((s) => s.fields);
+export default function BboxCanvas({ pageWidth, pageHeight, source, readOnly = false, resultsOverride, fieldsOverride, currentPageOverride }: Props) {
+  const storeCurrentPage = useAppStore((s) => source === 'b' ? s.currentPageB : s.currentPage);
+  const currentPage = currentPageOverride ?? storeCurrentPage;
+  const storeFields = useAppStore((s) => s.fields);
   const addField = useAppStore((s) => s.addField);
   const removeField = useAppStore((s) => s.removeField);
   const drawMode = useAppStore((s) => s.drawMode);
   const pendingAnchor = useAppStore((s) => s.pendingAnchor);
   const setPendingAnchor = useAppStore((s) => s.setPendingAnchor);
   const pdfId = useAppStore((s) => s.pdfId);
-  const extractionResults = useAppStore((s) => s.extractionResults);
+  const storeResults = useAppStore((s) => s.extractionResults);
+  const extractionResults = resultsOverride ?? storeResults;
   const editingFieldId = useAppStore((s) => s.editingFieldId);
   const setEditingFieldId = useAppStore((s) => s.setEditingFieldId);
   const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
@@ -146,6 +156,27 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
 
   // Whether field drawing/editing is allowed (set by TemplatePanel)
   const canEdit = useAppStore((s) => s.canDrawFields);
+  const effectiveCanEdit = readOnly ? false : canEdit;
+
+  // Build effective fields: use overrides or synthesize from results in readOnly mode
+  const effectiveFields = (() => {
+    if (fieldsOverride) return fieldsOverride;
+    if (readOnly && resultsOverride) {
+      return resultsOverride
+        .filter((r) => r.resolved_region)
+        .map((r): Field => ({
+          id: r.label,
+          label: r.label,
+          type: r.field_type === "cell" || r.field_type === "cell_range" ? "static" : r.field_type,
+          anchor_mode: "static",
+          anchors: [],
+          value_region: r.resolved_region!,
+          rules: [],
+          chain: [],
+        }));
+    }
+    return storeFields;
+  })();
 
   // Pointer tool: find the word at a normalized position
   const findWordAt = useCallback((normX: number, normY: number): WordInfo | null => {
@@ -209,7 +240,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
 
   // Handle pointer tool completion: create field from selected region
   const handlePointerComplete = useCallback(async (region: { x: number; y: number; width: number; height: number }) => {
-    if (!canEdit) return;
+    if (!effectiveCanEdit) return;
     const normRegion: Region = { page: currentPage, ...region };
 
     // If anchor/table wizard or drawing region for step, delegate to onDrawComplete path
@@ -277,9 +308,9 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
       });
       setPendingAnchor(null);
     }
-  }, [canEdit, currentPage, drawMode, pendingAnchor, setPendingAnchor, pdfId, addField, tableWizard, completeTableBounds, anchorWizard, completeAnchorWizardStep, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId]);
+  }, [effectiveCanEdit, currentPage, drawMode, pendingAnchor, setPendingAnchor, pdfId, addField, tableWizard, completeTableBounds, anchorWizard, completeAnchorWizardStep, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId]);
 
-  const currentPageFields = fields.filter(
+  const currentPageFields = effectiveFields.filter(
     (f) => {
       const onPage = f.type === 'table'
         ? f.table_config?.table_region.page === currentPage
@@ -303,7 +334,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
 
   const onDrawComplete = useCallback(
     async (rect: { x: number; y: number; width: number; height: number }) => {
-      if (!canEdit) return;
+      if (!effectiveCanEdit) return;
       const region = pixelRectToRegion(rect, currentPage, pageWidth, pageHeight);
 
       // If table wizard is in bounds phase, capture the drawn rectangle
@@ -390,13 +421,13 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
         setPendingAnchor(null);
       }
     },
-    [canEdit, addField, currentPage, pageWidth, pageHeight, drawMode, pendingAnchor, setPendingAnchor, pdfId, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId, anchorWizard, completeAnchorWizardStep, tableWizard, completeTableBounds]
+    [effectiveCanEdit, addField, currentPage, pageWidth, pageHeight, drawMode, pendingAnchor, setPendingAnchor, pdfId, drawingRegionForStepId, updateChainStep, setDrawingRegionForStepId, anchorWizard, completeAnchorWizardStep, tableWizard, completeTableBounds]
   );
 
   const { currentRect, handlers } = useBboxDrawing(onDrawComplete);
 
   const startDrag = useCallback((fieldId: string, regionType: 'value' | 'anchor', e: React.MouseEvent) => {
-    if (!canEdit) return;
+    if (!effectiveCanEdit) return;
     e.stopPropagation();
     e.preventDefault();
     const svg = svgRef.current;
@@ -404,7 +435,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
     const rect = svg.getBoundingClientRect();
     const scaleX = svg.clientWidth / rect.width;
     const scaleY = svg.clientHeight / rect.height;
-    const field = fields.find((f) => f.id === fieldId);
+    const field = effectiveFields.find((f) => f.id === fieldId);
     if (!field) return;
     const origRegion = regionType === 'anchor' ? field.anchor_region : field.value_region;
     if (!origRegion) return;
@@ -417,7 +448,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
       origRegion,
     });
     setDragPreview(null);
-  }, [canEdit, fields]);
+  }, [effectiveCanEdit, effectiveFields]);
 
   const onSvgMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (drag) {
@@ -507,7 +538,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
     }
 
     // Pointer tool: find word at click position
-    const isPointerMode = drawTool === 'pointer' && canEdit && !drag
+    const isPointerMode = drawTool === 'pointer' && effectiveCanEdit && !drag
       && !anchorWizard && !(tableWizard && tableWizard.phase === 'bounds')
       && !drawingRegionForStepId;
     if (isPointerMode) {
@@ -532,15 +563,15 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
       return;
     }
 
-    if (!drag && canEdit) handlers.onMouseDown(e);
-  }, [drag, handlers, editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId, tableWizard, addTableDivider, pageWidth, pageHeight, drawTool, canEdit, findWordAt, computeWordRegion, anchorWizard, drawingRegionForStepId]);
+    if (!drag && effectiveCanEdit) handlers.onMouseDown(e);
+  }, [drag, handlers, editingFieldId, setEditingFieldId, chainEditFieldId, setChainEditFieldId, tableWizard, addTableDivider, pageWidth, pageHeight, drawTool, effectiveCanEdit, findWordAt, computeWordRegion, anchorWizard, drawingRegionForStepId]);
   const previewColor = drawingRegionForStepId
     ? { fill: 'rgba(245,158,11,0.1)', stroke: 'rgb(245,158,11)' }
     : drawMode === 'dynamic' && !pendingAnchor
       ? { fill: 'rgba(245,158,11,0.15)', stroke: 'rgb(245,158,11)' }
       : { fill: 'rgba(59,130,246,0.15)', stroke: 'rgb(59,130,246)' };
 
-  const svgCursor = drag ? 'grabbing' : !canEdit ? 'default' : drawTool === 'pointer' ? 'default' : 'crosshair';
+  const svgCursor = drag ? 'grabbing' : !effectiveCanEdit ? 'default' : drawTool === 'pointer' ? 'default' : 'crosshair';
 
   return (
     <svg ref={svgRef} className="absolute top-0 left-0 w-full h-full" style={{ cursor: svgCursor, zIndex: 10 }}
@@ -570,10 +601,10 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
             style={{ display: isHidden ? 'none' : undefined }}>
             <FieldOverlay field={field} pw={pageWidth} ph={pageHeight}
               currentPage={currentPage} onRemove={() => removeField(field.id)} result={resultByKey[`${field.source ?? 'a'}:${field.label}`] ?? resultByKey[field.label] ?? null}
-              onStartDrag={canEdit ? startDrag : undefined}
+              onStartDrag={effectiveCanEdit ? startDrag : undefined}
               isEditing={isFieldEditing}
-              onSelect={canEdit ? () => setEditingFieldId(field.id) : undefined}
-              onUpdateLabel={canEdit ? (label: string) => updateFieldLabel(field.id, label) : undefined}
+              onSelect={effectiveCanEdit ? () => setEditingFieldId(field.id) : undefined}
+              onUpdateLabel={effectiveCanEdit ? (label: string) => updateFieldLabel(field.id, label) : undefined}
               valueDragOffset={{ dx: valueDx, dy: valueDy }}
               anchorDragOffset={{ dx: anchorDx, dy: anchorDy }}
               source={source} />
@@ -583,7 +614,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
 
       {/* Chain edit mode visualizations */}
       {chainEditFieldId && (() => {
-        const editField = fields.find((f) => f.id === chainEditFieldId);
+        const editField = effectiveFields.find((f) => f.id === chainEditFieldId);
         if (!editField || editField.value_region.page !== currentPage) return null;
         return <ChainEditOverlay field={editField} pw={pageWidth} ph={pageHeight} />;
       })()}
@@ -750,7 +781,7 @@ export default function BboxCanvas({ pageWidth, pageHeight, source }: Props) {
               );
             })()}
             {/* Delete icon */}
-            {canEdit && (
+            {effectiveCanEdit && (
               <g className="opacity-0 group-hover:opacity-100 cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); removeField(field.id); }}>
                 <circle cx={pos.x + dim.x - 8} cy={pos.y - 10} r={8} fill="rgb(239,68,68)" />
