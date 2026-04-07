@@ -165,6 +165,20 @@ class StorageBackend(ABC):
     @abstractmethod
     def get_spreadsheet_grid(self, spreadsheet_id: str) -> str | None: ...
 
+    # -- Global Values --
+
+    @abstractmethod
+    def save_global_value_group(self, group_id: str, content: str) -> None: ...
+
+    @abstractmethod
+    def get_global_value_group(self, group_id: str) -> str | None: ...
+
+    @abstractmethod
+    def list_global_value_group_ids(self) -> list[str]: ...
+
+    @abstractmethod
+    def delete_global_value_group(self, group_id: str) -> bool: ...
+
 
 class LocalStorageBackend(StorageBackend):
     """Filesystem-backed storage (current behaviour)."""
@@ -183,6 +197,7 @@ class LocalStorageBackend(StorageBackend):
         self._controle_series_runs = base_dir / "controle_series_runs"
         self._spreadsheets = base_dir / "spreadsheets"
         self._translation_rules = base_dir / "translation_rules"
+        self._global_values = base_dir / "global_values"
         self._uploads.mkdir(parents=True, exist_ok=True)
         self._templates.mkdir(parents=True, exist_ok=True)
         self._test_runs.mkdir(parents=True, exist_ok=True)
@@ -193,6 +208,7 @@ class LocalStorageBackend(StorageBackend):
         self._controle_series_runs.mkdir(parents=True, exist_ok=True)
         self._spreadsheets.mkdir(parents=True, exist_ok=True)
         self._translation_rules.mkdir(parents=True, exist_ok=True)
+        self._global_values.mkdir(parents=True, exist_ok=True)
 
     # -- PDFs --
 
@@ -403,11 +419,32 @@ class LocalStorageBackend(StorageBackend):
             return path.read_text()
         return None
 
+    # -- Global Values --
+
+    def save_global_value_group(self, group_id: str, content: str) -> None:
+        (self._global_values / f"{group_id}.json").write_text(content, encoding="utf-8")
+
+    def get_global_value_group(self, group_id: str) -> str | None:
+        path = self._global_values / f"{group_id}.json"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    def list_global_value_group_ids(self) -> list[str]:
+        return [p.stem for p in sorted(self._global_values.glob("*.json"))]
+
+    def delete_global_value_group(self, group_id: str) -> bool:
+        path = self._global_values / f"{group_id}.json"
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
+
 
 class AzureBlobStorageBackend(StorageBackend):
     """Azure Blob Storage backend using DefaultAzureCredential."""
 
-    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs", controles_container: str = "controles", controle_runs_container: str = "controle-runs", klanten_container: str = "klanten", controle_series_container: str = "controle-series", controle_series_runs_container: str = "controle-series-runs", spreadsheets_container: str = "spreadsheets", translation_rules_container: str = "translation-rules"):
+    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs", controles_container: str = "controles", controle_runs_container: str = "controle-runs", klanten_container: str = "klanten", controle_series_container: str = "controle-series", controle_series_runs_container: str = "controle-series-runs", spreadsheets_container: str = "spreadsheets", translation_rules_container: str = "translation-rules", global_values_container: str = "global-values"):
         from azure.identity import DefaultAzureCredential
         from azure.storage.blob import BlobServiceClient
 
@@ -424,8 +461,9 @@ class AzureBlobStorageBackend(StorageBackend):
         self._controle_series_runs = self._client.get_container_client(controle_series_runs_container)
         self._spreadsheets = self._client.get_container_client(spreadsheets_container)
         self._translation_rules = self._client.get_container_client(translation_rules_container)
+        self._global_values = self._client.get_container_client(global_values_container)
         # Ensure all containers exist
-        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs, self._klanten, self._controle_series, self._controle_series_runs, self._spreadsheets, self._translation_rules]:
+        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs, self._klanten, self._controle_series, self._controle_series_runs, self._spreadsheets, self._translation_rules, self._global_values]:
             if not container.exists():
                 container.create_container()
 
@@ -696,6 +734,32 @@ class AzureBlobStorageBackend(StorageBackend):
         if not blob_client.exists():
             return None
         return blob_client.download_blob().readall().decode("utf-8")
+
+    # -- Global Values --
+
+    def save_global_value_group(self, group_id: str, content: str) -> None:
+        self._global_values.upload_blob(f"{group_id}.json", content, overwrite=True)
+
+    def get_global_value_group(self, group_id: str) -> str | None:
+        blob_client = self._global_values.get_blob_client(f"{group_id}.json")
+        if not blob_client.exists():
+            return None
+        return blob_client.download_blob().readall().decode("utf-8")
+
+    def list_global_value_group_ids(self) -> list[str]:
+        ids = []
+        for blob in self._global_values.list_blobs():
+            name = blob.name
+            if name.endswith(".json"):
+                ids.append(name.removesuffix(".json"))
+        return sorted(ids)
+
+    def delete_global_value_group(self, group_id: str) -> bool:
+        blob_client = self._global_values.get_blob_client(f"{group_id}.json")
+        if not blob_client.exists():
+            return False
+        blob_client.delete_blob()
+        return True
 
 
 # -- Singleton --
