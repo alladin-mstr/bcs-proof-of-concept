@@ -95,8 +95,8 @@ class Condition(BaseModel):
     else_value: RuleOperand
 
 
-class PolarisConfig(BaseModel):
-    """Configuration for a Polaris signal lookup node."""
+class SignalLookupConfig(BaseModel):
+    """Configuration for a signal lookup node."""
     spreadsheet_id: str
     key_column: str
     signal_column: str
@@ -126,7 +126,7 @@ class ComputationConfig(BaseModel):
     output_datatype: DataType | None = None
     condition: Condition | None = None      # for if/then/else
     row_filter_mode: RowFilterMode | None = None  # for row_filter operation
-    polaris_config: PolarisConfig | None = None  # for polaris_lookup operation
+    signal_lookup_config: SignalLookupConfig | None = None  # for signal_lookup operation
 
 
 class TemplateRule(BaseModel):
@@ -332,6 +332,7 @@ class ExtractionResponse(BaseModel):
     pdf_id_b: str | None = None
     template_rule_results: list[TemplateRuleResult] = []
     computed_values: dict[str, str] = {}
+    source_filename: str | None = None  # NEW: identifies which uploaded file produced this response
 
 
 class TestRunEntry(BaseModel):
