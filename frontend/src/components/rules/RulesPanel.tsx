@@ -19,8 +19,8 @@ import '@xyflow/react/dist/style.css';
 import { useAppStore } from '@/store/appStore';
 import { nodeTypes } from './RuleNodes';
 import { serializeGraph } from './serializeGraph';
-import { listAllTemplateFields, listTestRuns, listControleRuns, updateTemplate as apiUpdateTemplate, type TemplateFieldInfo } from '../../api/client';
-import type { RuleNodeData, MathOperation, CompareOperator, AggregateOperation, RowFilterMode, DataType, TestRun, Field } from '../../types';
+import { listAllTemplateFields, listTestRuns, listControleRuns, updateTemplate as apiUpdateTemplate, listGlobalValueGroups, type TemplateFieldInfo } from '../../api/client';
+import type { RuleNodeData, MathOperation, CompareOperator, AggregateOperation, RowFilterMode, DataType, TestRun, Field, GlobalValueGroup } from '../../types';
 import {
   Plus, Minus, X, Divide, Sigma, BarChart3, ArrowDownNarrowWide, ArrowUpNarrowWide,
   FlipVertical, RotateCcw,
@@ -129,6 +129,7 @@ export default function RulesPanel() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [externalTemplates, setExternalTemplates] = useState<TemplateFieldInfo[]>([]);
   const [externalRuns, setExternalRuns] = useState<TestRun[]>([]);
+  const [globalGroups, setGlobalGroups] = useState<GlobalValueGroup[]>([]);
   const savedTestRuns = useAppStore((s) => s.savedTestRuns);
   const setSavedTestRuns = useAppStore((s) => s.setSavedTestRuns);
   const templates = useAppStore((s) => s.templates);
@@ -366,6 +367,15 @@ export default function RulesPanel() {
     [ruleNodes, isTableOrSpreadsheetFieldInput]
   );
 
+  // Load global value groups when Input tab is opened
+  useEffect(() => {
+    if (showAddMenu && menuCategory === 'Input') {
+      listGlobalValueGroups()
+        .then(setGlobalGroups)
+        .catch(() => {});
+    }
+  }, [showAddMenu, menuCategory]);
+
   // Load external data sources when Input tab is opened
   useEffect(() => {
     if (showAddMenu && menuCategory === 'Input') {
@@ -483,6 +493,26 @@ export default function RulesPanel() {
         tableColumnLabel: columnLabel,
         tableColumnId: columnId,
         ...(lastValue !== undefined ? { lastValue } : {}),
+      } as RuleNodeData,
+    };
+    setRuleNodes([...ruleNodes, newNode]);
+    setShowAddMenu(false);
+  };
+
+  const handleAddGlobalValue = (group: GlobalValueGroup, value: GlobalValueGroup["values"][0]) => {
+    const id = crypto.randomUUID();
+    const newNode: Node = {
+      id,
+      type: 'global_value_input',
+      position: { x: 250 + Math.random() * 100, y: 50 + Math.random() * 200 },
+      data: {
+        label: value.name,
+        nodeType: 'global_value_input',
+        globalGroupId: group.id,
+        globalValueId: value.id,
+        groupName: group.name,
+        globalDataType: value.dataType,
+        lastValue: value.value,
       } as RuleNodeData,
     };
     setRuleNodes([...ruleNodes, newNode]);
@@ -738,9 +768,11 @@ export default function RulesPanel() {
                   localFields={fields}
                   externalTemplates={externalTemplates}
                   externalRuns={externalRuns}
+                  globalGroups={globalGroups}
                   onAddConstant={() => handleAddNode({ type: 'literal_input', label: 'Constant', category: 'Input' })}
                   onAddExternalField={handleAddExternalField}
                   onAddTableColumn={handleAddTableColumn}
+                  onAddGlobalValue={handleAddGlobalValue}
                 />
               ) : (
                 (() => {
@@ -850,16 +882,20 @@ function InputSourceMenu({
   localFields,
   externalTemplates,
   externalRuns,
+  globalGroups,
   onAddConstant,
   onAddExternalField,
   onAddTableColumn,
+  onAddGlobalValue,
 }: {
   localFields: Field[];
   externalTemplates: TemplateFieldInfo[];
   externalRuns: TestRun[];
+  globalGroups: GlobalValueGroup[];
   onAddConstant: () => void;
   onAddExternalField: (templateId: string, templateName: string, fieldLabel: string, resolution?: 'latest_run' | 'specific_run', testRunId?: string, fieldType?: string) => void;
   onAddTableColumn: (fieldLabel: string, columnLabel: string, columnId: string, templateId?: string, templateName?: string) => void;
+  onAddGlobalValue: (group: GlobalValueGroup, value: GlobalValueGroup["values"][0]) => void;
 }) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
@@ -877,6 +913,48 @@ function InputSourceMenu({
         </span>
         Constant value
       </button>
+
+      {/* Global Values */}
+      {globalGroups.length > 0 && (
+        <>
+          <div className="h-px bg-border mx-2 my-1" />
+          <div className="px-3 pt-2 pb-1">
+            <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Globale waarden</span>
+          </div>
+          {globalGroups.map((g) => (
+            <div key={g.id}>
+              <button
+                onClick={() => setExpandedSection(expandedSection === `gv-${g.id}` ? null : `gv-${g.id}`)}
+                className="w-full text-left px-3 py-1.5 text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+              >
+                <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+                </svg>
+                <span className="flex-1 truncate">{g.name}</span>
+                <span className="text-[10px] text-muted-foreground">v{g.version}</span>
+                <svg className={`w-3 h-3 text-muted-foreground transition-transform ${expandedSection === `gv-${g.id}` ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              {expandedSection === `gv-${g.id}` && (
+                <div className="pl-8 pr-2 pb-1">
+                  {g.values.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => onAddGlobalValue(g, v)}
+                      className="w-full text-left px-2 py-1 text-[11px] text-foreground/80 hover:bg-muted rounded transition-colors flex items-center gap-1.5"
+                    >
+                      <span className="w-1 h-1 rounded-full bg-amber-400 flex-shrink-0" />
+                      <span className="truncate flex-1">{v.name}</span>
+                      <span className="text-[9px] text-muted-foreground">{v.value || "—"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
 
       {/* Local Table Columns */}
       {tableFields.length > 0 && (
