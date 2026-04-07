@@ -84,7 +84,35 @@ export default function RunResultViewer({ fileGroups, ruleResults, computedValue
   }, [selectedFile]);
 
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-[calc(100vh-8rem)] rounded-lg border border-border">
+    <div className="flex flex-col gap-3">
+      {/* Summary banner */}
+      <div className="flex items-center gap-3 px-1">
+        <div className="flex items-center gap-1.5 text-sm">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          <span className="font-semibold text-green-600">{summary.fieldsOk}</span>
+          <span className="text-muted-foreground text-xs">velden OK</span>
+        </div>
+        {summary.failures > 0 && (
+          <div className="flex items-center gap-1.5 text-sm">
+            <XCircle className="h-4 w-4 text-red-500" />
+            <span className="font-semibold text-red-600">{summary.failures}</span>
+            <span className="text-muted-foreground text-xs">afwijkingen</span>
+          </div>
+        )}
+        {summary.rulesTotal > 0 && (
+          <>
+            <span className="text-border">|</span>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className={`font-semibold ${summary.rulesPassed === summary.rulesTotal ? "text-green-600" : "text-amber-600"}`}>
+                {summary.rulesPassed}/{summary.rulesTotal}
+              </span>
+              <span className="text-muted-foreground text-xs">regels geslaagd</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <ResizablePanelGroup direction="horizontal" className="h-[calc(100vh-10rem)] rounded-lg border border-border">
       {/* Left: File Sidebar */}
       <ResizablePanel defaultSize={18} minSize={12} maxSize={30}>
         <FileSidebar
@@ -324,5 +352,6 @@ export default function RunResultViewer({ fileGroups, ruleResults, computedValue
         </div>
       </ResizablePanel>
     </ResizablePanelGroup>
+    </div>
   );
 }
