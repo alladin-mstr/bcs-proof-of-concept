@@ -693,8 +693,8 @@ export default function RulesPanel() {
         }
       }
 
-      // Polaris lookup nodes: populate lastValue from computedValues
-      if (n.type === 'polaris_lookup') {
+      // Signal lookup nodes: populate lastValue from computedValues
+      if (n.type === 'signal_lookup') {
         const result = ruleResultMap[n.id];
         if (result?.computed_value !== undefined && result.computed_value !== data.lastValue) {
           patch.lastValue = result.computed_value;

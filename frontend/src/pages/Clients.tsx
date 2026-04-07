@@ -1,26 +1,9 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { HeaderAction } from "@/context/HeaderActionContext";
-import { Search, Plus, FolderOpen, ChevronRight, CheckCircle, AlertTriangle, Users } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Plus, FileText, ChevronRight, Layers, CheckCircle, AlertTriangle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -30,86 +13,470 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { listKlanten, createKlant, deleteKlant as deleteKlantApi, listControleRuns } from "@/api/client";
-import type { Klant, ControleRunResult } from "@/types";
+import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  listKlanten,
+  createKlant,
+  deleteKlant as deleteKlantApi,
+  listControles,
+  listControleRuns,
+  listControleSeries,
+  unlinkControl,
+} from "@/api/client";
+import type { Klant, Controle, ControleRunResult, ControleSeries } from "@/types";
+import { KlantTree } from "@/components/KlantTree";
+import { getAncestorPath, buildTree, findNode, collectSubtreeIds } from "@/lib/tree-utils";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Clients() {
   const navigate = useNavigate();
+  const { clientId } = useParams<{ clientId?: string }>();
   const { toast } = useToast();
+
+  // Data state
   const [klanten, setKlanten] = useState<Klant[]>([]);
-  const [runs, setRuns] = useState<ControleRunResult[]>([]);
-  const [newMedewerkerCount, setNewMedewerkerCount] = useState<string>("");
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("recent");
-  const [newClientName, setNewClientName] = useState("");
+  const [allControles, setAllControles] = useState<Controle[]>([]);
+  const [allRuns, setAllRuns] = useState<ControleRunResult[]>([]);
+  const [allSeries, setAllSeries] = useState<ControleSeries[]>([]);
+
+  // UI state
+  const [selectedId, setSelectedId] = useState<string | null>(clientId || null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogParentId, setDialogParentId] = useState<string | null>(null);
+  const [newClientName, setNewClientName] = useState("");
+  const [newMedewerkerCount, setNewMedewerkerCount] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [klantToDelete, setKlantToDelete] = useState<Klant | null>(null);
 
   useEffect(() => {
-    listKlanten().then(setKlanten).catch(() => {});
-    listControleRuns().then(setRuns).catch(() => {});
+    Promise.all([
+      listKlanten(),
+      listControles(),
+      listControleRuns(),
+      listControleSeries(),
+    ]).then(([k, c, r, s]) => {
+      setKlanten(k);
+      setAllControles(c);
+      setAllRuns(r);
+      setAllSeries(s);
+      // Auto-select from URL param or first root
+      if (clientId && k.find(kl => kl.id === clientId)) {
+        setSelectedId(clientId);
+      } else if (!selectedId && k.length > 0) {
+        const roots = k.filter(kl => !kl.parentId);
+        if (roots.length > 0) setSelectedId(roots[0].id);
+      }
+    });
   }, []);
 
-  const clientsWithStats = klanten.map(client => {
-    const clientRuns = runs.filter(r => r.klantId === client.id);
-    const lastRun = clientRuns[0];
-    const totalRuns = clientRuns.length;
-    const openBevindingen = clientRuns.filter(r => r.status !== "success").length;
+  const selected = useMemo(() => klanten.find(k => k.id === selectedId), [klanten, selectedId]);
+  const ancestorPath = useMemo(() => selectedId ? getAncestorPath(klanten, selectedId) : [], [klanten, selectedId]);
 
-    return {
-      ...client,
-      lastRun,
-      totalRuns,
-      openBevindingen,
-    };
-  });
+  // Filtered data for selected klant
+  const controles = useMemo(
+    () => allControles.filter(c => c.klantId === selectedId),
+    [allControles, selectedId]
+  );
+  const runs = useMemo(
+    () => allRuns.filter(r => r.klantId === selectedId),
+    [allRuns, selectedId]
+  );
+  const series = useMemo(
+    () => allSeries.filter(s => s.klantId === selectedId),
+    [allSeries, selectedId]
+  );
+  const children = useMemo(
+    () => klanten.filter(k => k.parentId === selectedId),
+    [klanten, selectedId]
+  );
 
-  const filteredClients = clientsWithStats
-    .filter(client => client.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      if (sortBy === "recent") {
-        const aDate = a.lastRun?.runAt || a.createdAt;
-        const bDate = b.lastRun?.runAt || b.createdAt;
-        return new Date(bDate).getTime() - new Date(aDate).getTime();
-      }
-      return a.name.localeCompare(b.name);
-    });
+  // Delete info
+  const deleteInfo = useMemo(() => {
+    if (!klantToDelete) return { descendants: 0, controles: 0 };
+    const tree = buildTree(klanten);
+    const node = findNode(tree, klantToDelete.id);
+    if (!node) return { descendants: 0, controles: 0 };
+    const subtreeIds = collectSubtreeIds(node);
+    const descendantCount = subtreeIds.length - 1;
+    const controleCount = allControles.filter(c => subtreeIds.includes(c.klantId || "")).length;
+    return { descendants: descendantCount, controles: controleCount };
+  }, [klantToDelete, klanten, allControles]);
 
   const handleAddClient = async () => {
-    if (newClientName.trim()) {
-      try {
-        const klant = await createKlant({
-          name: newClientName.trim(),
-          medewerkerCount: newMedewerkerCount ? parseInt(newMedewerkerCount, 10) : undefined,
-        });
-        setKlanten(prev => [klant, ...prev]);
-        setNewClientName("");
-        setNewMedewerkerCount("");
-        setDialogOpen(false);
-      } catch {
-        toast({ title: "Toevoegen mislukt", variant: "destructive" });
-      }
+    if (!newClientName.trim()) return;
+    try {
+      const klant = await createKlant({
+        name: newClientName.trim(),
+        medewerkerCount: newMedewerkerCount ? parseInt(newMedewerkerCount, 10) : undefined,
+        parentId: dialogParentId,
+      });
+      // Refresh full list to get updated sourceControlIds
+      const updated = await listKlanten();
+      setKlanten(updated);
+      // Also refresh controles since auto-copy may have created new ones
+      const updatedControles = await listControles();
+      setAllControles(updatedControles);
+      setSelectedId(klant.id);
+      setNewClientName("");
+      setNewMedewerkerCount("");
+      setDialogOpen(false);
+    } catch {
+      toast({ title: "Toevoegen mislukt", variant: "destructive" });
     }
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+  const handleDelete = async () => {
+    if (!klantToDelete) return;
+    try {
+      await deleteKlantApi(klantToDelete.id);
+      const updated = await listKlanten();
+      setKlanten(updated);
+      const updatedControles = await listControles();
+      setAllControles(updatedControles);
+      if (selectedId === klantToDelete.id) {
+        setSelectedId(updated.length > 0 ? updated.find(k => !k.parentId)?.id || null : null);
+      }
+      setDeleteDialogOpen(false);
+      setKlantToDelete(null);
+    } catch {
+      toast({ title: "Verwijderen mislukt", variant: "destructive" });
+    }
+  };
+
+  const handleUnlink = async (controleId: string) => {
+    if (!selectedId) return;
+    try {
+      await unlinkControl(selectedId, controleId);
+      const updated = await listKlanten();
+      setKlanten(updated);
+      toast({ title: "Controle ontkoppeld" });
+    } catch {
+      toast({ title: "Ontkoppelen mislukt", variant: "destructive" });
+    }
+  };
+
+  const openAddDialog = (parentId: string | null) => {
+    setDialogParentId(parentId);
+    setNewClientName("");
+    setNewMedewerkerCount("");
+    setDialogOpen(true);
+  };
+
+  const formatDate = (date: string) =>
+    new Date(date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+
+  const formatTime = (date: string) =>
+    new Date(date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+  // Group runs by month
+  const runsByMonth = runs.reduce((acc, run) => {
+    const date = new Date(run.runAt);
+    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    const monthLabel = date.toLocaleDateString("nl-NL", { month: "long", year: "numeric" });
+    if (!acc[monthKey]) acc[monthKey] = { label: monthLabel, runs: [] };
+    acc[monthKey].runs.push(run);
+    return acc;
+  }, {} as Record<string, { label: string; runs: ControleRunResult[] }>);
+
+  const getSourceName = (controleId: string) => {
+    if (!selected?.sourceControlIds) return null;
+    const sourceId = selected.sourceControlIds[controleId];
+    if (!sourceId) return null;
+    const sourceControle = allControles.find(c => c.id === sourceId);
+    if (!sourceControle?.klantId) return null;
+    const sourceKlant = klanten.find(k => k.id === sourceControle.klantId);
+    return sourceKlant?.name || null;
   };
 
   return (
-    <div className="space-y-8">
-      <HeaderAction>
-        <Button className="rounded-full shadow-lg" size="sm" onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nieuwe klant
-        </Button>
-      </HeaderAction>
+    <div className="flex h-[calc(100vh-3.5rem)] -m-6">
+      {/* Tree sidebar */}
+      <div className="w-72 border-r bg-muted/30 shrink-0">
+        <KlantTree
+          klanten={klanten}
+          selectedId={selectedId || undefined}
+          onSelect={(k) => setSelectedId(k.id)}
+          onAddChild={openAddDialog}
+        />
+      </div>
 
+      {/* Detail panel */}
+      <div className="flex-1 overflow-auto p-6">
+        {selected ? (
+          <div className="space-y-6">
+            {/* Breadcrumb */}
+            {ancestorPath.length > 1 && (
+              <div className="text-sm text-muted-foreground">
+                {ancestorPath.slice(0, -1).map((a, i) => (
+                  <span key={a.id}>
+                    {i > 0 && " › "}
+                    <button
+                      className="hover:text-foreground transition-colors"
+                      onClick={() => setSelectedId(a.id)}
+                    >
+                      {a.name}
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold">{selected.name}</h1>
+                {selected.medewerkerCount && (
+                  <p className="text-sm text-muted-foreground">{selected.medewerkerCount} medewerkers</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    setKlantToDelete(selected);
+                    setDeleteDialogOpen(true);
+                  }}
+                >
+                  Verwijderen
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => navigate(`/controles?newForKlant=${selected.id}`)}
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  Nieuwe controle
+                </Button>
+              </div>
+            </div>
+
+            {/* Controles */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>Controles</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {controles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Nog geen controles</p>
+                ) : (
+                  <div className="space-y-2">
+                    {controles.map((c) => {
+                      const totalFields = c.files.reduce((sum, f) => sum + f.fields.length, 0);
+                      const sourceName = getSourceName(c.id);
+                      return (
+                        <div
+                          key={c.id}
+                          className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border"
+                          onClick={() => navigate(`/controle/${c.id}`)}
+                        >
+                          <div className="flex items-center gap-4">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <span className="font-medium">{c.name}</span>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                                <span>{c.files.length} bestanden</span>
+                                <span>{totalFields} velden</span>
+                                <span>{formatDate(c.createdAt)}</span>
+                              </div>
+                              {sourceName && (
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <span className="text-xs text-primary">
+                                    Overgenomen van {sourceName}
+                                  </span>
+                                  <button
+                                    className="text-xs text-primary underline hover:text-primary/80"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUnlink(c.id);
+                                    }}
+                                  >
+                                    Ontkoppelen
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {c.status === "published" ? (
+                              <Badge variant="outline" className="text-success border-success/30 bg-success/10">
+                                Gepubliceerd
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
+                                Concept
+                              </Badge>
+                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Sub-klanten */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Sub-klanten</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-primary"
+                    onClick={() => openAddDialog(selected.id)}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Toevoegen
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {children.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Geen sub-klanten</p>
+                ) : (
+                  <div className="space-y-2">
+                    {children.map((child) => {
+                      const childControles = allControles.filter(c => c.klantId === child.id).length;
+                      return (
+                        <div
+                          key={child.id}
+                          className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border"
+                          onClick={() => setSelectedId(child.id)}
+                        >
+                          <div>
+                            <span className="font-medium">{child.name}</span>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {childControles} controles
+                              {child.medewerkerCount ? ` · ${child.medewerkerCount} medewerkers` : ""}
+                            </div>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Series */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>Series</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {series.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Nog geen series</p>
+                ) : (
+                  <div className="space-y-2">
+                    {series.map((s) => (
+                      <div
+                        key={s.id}
+                        className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border"
+                        onClick={() => navigate(`/controle-series/${s.id}`)}
+                      >
+                        <div className="flex items-center gap-4">
+                          <Layers className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <span className="font-medium">{s.name}</span>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {s.steps.length} stappen · {formatDate(s.createdAt)}
+                            </div>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Control history */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>Controlegeschiedenis</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {runs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Nog geen controles uitgevoerd</p>
+                ) : (
+                  <div className="space-y-6">
+                    {Object.entries(runsByMonth).map(([monthKey, { label, runs: monthRuns }]) => (
+                      <div key={monthKey}>
+                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3 border-b pb-2">
+                          {label}
+                        </h3>
+                        <div className="space-y-2">
+                          {monthRuns.map((run) => (
+                            <div
+                              key={run.id}
+                              className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border"
+                              onClick={() => navigate(`/controle/${run.controleId}/run`)}
+                            >
+                              <div className="flex items-center gap-4">
+                                <span className="text-sm text-muted-foreground w-32">
+                                  {formatTime(run.runAt)}
+                                </span>
+                                <span className="font-medium">{run.controleName}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {run.status === "success" ? (
+                                  <Badge variant="outline" className="text-success border-success/30 bg-success/10 gap-1">
+                                    <CheckCircle className="h-3 w-3" />
+                                    Alles ok
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10 gap-1">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    {run.failedFields} afwijking{run.failedFields !== 1 ? "en" : ""}
+                                  </Badge>
+                                )}
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+            <p>Selecteer een klant om details te bekijken</p>
+          </div>
+        )}
+      </div>
+
+      {/* Create dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nieuwe klant toevoegen</DialogTitle>
-            <DialogDescription>Voeg een nieuwe klant toe.</DialogDescription>
+            <DialogTitle>
+              {dialogParentId
+                ? `Sub-klant toevoegen aan ${klanten.find(k => k.id === dialogParentId)?.name}`
+                : "Nieuwe klant toevoegen"}
+            </DialogTitle>
+            <DialogDescription>
+              {dialogParentId
+                ? "Deze klant wordt aangemaakt als sub-klant. Controles van de bovenliggende klant worden automatisch overgenomen."
+                : "Voeg een nieuwe klant toe op het hoogste niveau."}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -119,7 +486,7 @@ export default function Clients() {
                 placeholder="Bijv. Bakkerij de Gouden Korst"
                 value={newClientName}
                 onChange={(e) => setNewClientName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddClient()}
+                onKeyDown={(e) => e.key === "Enter" && handleAddClient()}
               />
             </div>
             <div className="space-y-2">
@@ -140,81 +507,28 @@ export default function Clients() {
         </DialogContent>
       </Dialog>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Zoek klant..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 rounded-full"
-          />
-        </div>
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-48 rounded-full">
-            <SelectValue placeholder="Sorteer" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="recent">Recent</SelectItem>
-            <SelectItem value="name">Naam A-Z</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Clients Table */}
-      <Card className="shadow-sm">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Klant</TableHead>
-                <TableHead>Medewerkers</TableHead>
-                <TableHead>Laatste controle</TableHead>
-                <TableHead className="text-right">Open bevindingen</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredClients.map((client) => (
-                <TableRow
-                  key={client.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/klanten/${client.id}`)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <FolderOpen className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{client.name}</p>
-                        {client.medewerkerCount && (
-                          <p className="text-xs text-muted-foreground">{client.medewerkerCount} medewerkers</p>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {client.medewerkerCount || '—'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {client.lastRun ? formatDate(client.lastRun.runAt) : '—'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {client.openBevindingen > 0 ? (
-                      <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
-                        {client.openBevindingen}
-                      </Badge>
-                    ) : (
-                      <span className="text-success text-sm">0</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Klant verwijderen</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je &ldquo;{klantToDelete?.name}&rdquo; wilt verwijderen?
+              {deleteInfo.descendants > 0 && (
+                <span className="block mt-2 font-medium text-destructive">
+                  Dit verwijdert ook {deleteInfo.descendants} sub-klant{deleteInfo.descendants !== 1 ? "en" : ""} en {deleteInfo.controles} controle{deleteInfo.controles !== 1 ? "s" : ""}.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

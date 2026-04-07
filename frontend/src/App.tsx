@@ -10,7 +10,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
-import ClientDetail from "./pages/ClientDetail";
 import ControleWizard from "./pages/ControleWizard";
 import ControleDetail from "./pages/ControleDetail";
 import RunControle from "./pages/RunControle";
@@ -47,7 +46,7 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
                 <Route path="/klanten" element={<ProtectedPage><Clients /></ProtectedPage>} />
-                <Route path="/klanten/:clientId" element={<ProtectedPage><ClientDetail /></ProtectedPage>} />
+                <Route path="/klanten/:clientId" element={<ProtectedPage><Clients /></ProtectedPage>} />
                 <Route path="/controle/nieuw" element={<ProtectedPage><ControleWizard /></ProtectedPage>} />
                 <Route path="/controle/:id" element={<ProtectedPage><ControleDetail /></ProtectedPage>} />
                 <Route path="/controle/:id/edit" element={<ProtectedPage><ControleWizard /></ProtectedPage>} />

@@ -380,6 +380,8 @@ export interface Klant {
   id: string;
   name: string;
   medewerkerCount?: number;
+  parentId?: string | null;
+  sourceControlIds?: Record<string, string> | null;
   createdAt: string;
   updatedAt: string;
 }

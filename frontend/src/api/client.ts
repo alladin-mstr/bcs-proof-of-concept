@@ -295,7 +295,7 @@ export async function getControleRunDetails(runId: string): Promise<ExtractionRe
 // --- Klanten ---
 
 export async function createKlant(
-  data: { name: string; medewerkerCount?: number },
+  data: { name: string; medewerkerCount?: number; parentId?: string | null },
 ): Promise<Klant> {
   const response = await api.post("/klanten", data);
   return response.data;
@@ -311,16 +311,26 @@ export async function getKlant(id: string): Promise<Klant> {
   return response.data;
 }
 
+export async function getKlantChildren(id: string): Promise<Klant[]> {
+  const response = await api.get(`/klanten/${id}/children`);
+  return response.data;
+}
+
 export async function updateKlant(
   id: string,
-  data: { name: string; medewerkerCount?: number },
+  data: { name: string; medewerkerCount?: number; parentId?: string | null },
 ): Promise<Klant> {
   const response = await api.put(`/klanten/${id}`, data);
   return response.data;
 }
 
-export async function deleteKlant(id: string): Promise<void> {
-  await api.delete(`/klanten/${id}`);
+export async function deleteKlant(id: string): Promise<{ detail: string; deletedKlanten: number }> {
+  const response = await api.delete(`/klanten/${id}`);
+  return response.data;
+}
+
+export async function unlinkControl(klantId: string, controleId: string): Promise<void> {
+  await api.post(`/klanten/${klantId}/unlink-control/${controleId}`);
 }
 
 // --- Controle Series ---
