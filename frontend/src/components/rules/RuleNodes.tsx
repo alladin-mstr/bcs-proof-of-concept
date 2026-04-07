@@ -1,5 +1,6 @@
 import { memo, useState, useCallback } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
+import { useAppStore } from '@/store/appStore';
 import type { RuleNodeData, DataType, MathOperation, CompareOperator, AggregateOperation, RowFilterMode } from '../../types';
 
 /* ── shared styles ── */
@@ -560,6 +561,95 @@ export const CellRangeNode = memo(({ id, data }: NodeProps & { data: RuleNodeDat
 });
 CellRangeNode.displayName = 'CellRangeNode';
 
+/* ── Polaris Lookup Node ── */
+
+export const PolarisLookupNode = memo(({ id, data }: NodeProps & { data: RuleNodeData }) => {
+  const { setNodes } = useReactFlow();
+  const wizardControle = useAppStore((s) => s.wizardControle);
+  const ssFiles = wizardControle?.files?.filter((f) => f.fileType === 'spreadsheet') || [];
+
+  // Get headers for selected spreadsheet
+  const selectedFile = ssFiles.find((f) => f.spreadsheetId === data.polarisSpreadsheetId);
+  const headers: string[] = selectedFile?.sheetData?.headers || [];
+
+  const updateField = useCallback((field: string, value: string) => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, [field]: value } } : n
+      )
+    );
+  }, [id, setNodes]);
+
+  return (
+    <div className="px-2.5 py-2 rounded-lg border-2 border-violet-500 bg-violet-50/80 dark:bg-violet-950 shadow-sm min-w-[180px] max-w-[220px]">
+      <div className="text-[8px] uppercase tracking-wider font-semibold text-violet-500 dark:text-violet-400 leading-none mb-1">
+        Polaris Lookup
+      </div>
+
+      {/* Spreadsheet selector */}
+      <select
+        value={data.polarisSpreadsheetId || ''}
+        onChange={(e) => {
+          updateField('polarisSpreadsheetId', e.target.value);
+          updateField('polarisKeyColumn', '');
+          updateField('polarisSignalColumn', '');
+        }}
+        className="w-full text-[10px] bg-violet-100 dark:bg-violet-900 border border-violet-300 dark:border-violet-600 rounded px-1 py-0.5 text-violet-800 dark:text-violet-200 outline-none mb-1"
+      >
+        <option value="">spreadsheet...</option>
+        {ssFiles.map((f) => (
+          <option key={f.spreadsheetId} value={f.spreadsheetId || ''}>
+            {f.label || f.spreadsheetFilename || f.spreadsheetId}
+          </option>
+        ))}
+      </select>
+
+      {/* Key column selector */}
+      <select
+        value={data.polarisKeyColumn || ''}
+        onChange={(e) => updateField('polarisKeyColumn', e.target.value)}
+        className="w-full text-[10px] bg-violet-100 dark:bg-violet-900 border border-violet-300 dark:border-violet-600 rounded px-1 py-0.5 text-violet-800 dark:text-violet-200 outline-none mb-1"
+        disabled={headers.length === 0}
+      >
+        <option value="">key column...</option>
+        {headers.map((h) => (
+          <option key={h} value={h}>{h}</option>
+        ))}
+      </select>
+
+      {/* Signal column selector */}
+      <select
+        value={data.polarisSignalColumn || ''}
+        onChange={(e) => updateField('polarisSignalColumn', e.target.value)}
+        className="w-full text-[10px] bg-violet-100 dark:bg-violet-900 border border-violet-300 dark:border-violet-600 rounded px-1 py-0.5 text-violet-800 dark:text-violet-200 outline-none mb-1"
+        disabled={headers.length === 0}
+      >
+        <option value="">signal column...</option>
+        {headers.map((h) => (
+          <option key={h} value={h}>{h}</option>
+        ))}
+      </select>
+
+      <EditableName id={id} name={data.outputLabel} textClass="text-[9px] text-violet-500 dark:text-violet-400" />
+      {data.lastValue !== undefined && (
+        <div className="text-[10px] text-violet-600/60 dark:text-violet-400/60 truncate" title={data.lastValue}>
+          {(() => {
+            try {
+              const parsed = JSON.parse(data.lastValue);
+              const keys = Object.keys(parsed);
+              return `${keys.length} groups`;
+            } catch {
+              return data.lastValue;
+            }
+          })()}
+        </div>
+      )}
+      <Handle type="source" position={Position.Right} className={`${HANDLE} !bg-violet-500`} />
+    </div>
+  );
+});
+PolarisLookupNode.displayName = 'PolarisLookupNode';
+
 /* ── Export ── */
 
 export const nodeTypes = {
@@ -574,4 +664,5 @@ export const nodeTypes = {
   table_row_filter: TableRowFilterNode,
   formula: FormulaNode,
   cell_range: CellRangeNode,
+  polaris_lookup: PolarisLookupNode,
 };

@@ -84,6 +84,7 @@ export interface ComputationConfig {
   output_datatype?: DataType;
   condition?: Condition;
   row_filter_mode?: RowFilterMode;
+  polaris_config?: PolarisConfig;
 }
 
 export interface TemplateRule {
@@ -113,7 +114,7 @@ export interface TemplateRuleResult {
 
 // --- React Flow node types for Rules editor ---
 
-export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter" | "formula" | "cell_range";
+export type RuleNodeType = "field_input" | "literal_input" | "math_operation" | "comparison" | "validation" | "condition" | "table_column" | "table_aggregate" | "table_row_filter" | "formula" | "cell_range" | "polaris_lookup";
 
 export interface RuleNodeData {
   label: string;
@@ -153,6 +154,10 @@ export interface RuleNodeData {
   // Cell range node
   rangeExpression?: string;  // e.g. "B2:B50"
   cellRange?: CellRange;
+  // Polaris lookup node
+  polarisSpreadsheetId?: string;
+  polarisKeyColumn?: string;
+  polarisSignalColumn?: string;
   // Last evaluated value (for display)
   lastValue?: string;
   lastPassed?: boolean;
@@ -328,6 +333,12 @@ export interface CellRange {
   startRow: number;
   endCol: number;
   endRow: number;
+}
+
+export interface PolarisConfig {
+  spreadsheet_id: string;
+  key_column: string;
+  signal_column: string;
 }
 
 export interface ControleFile {

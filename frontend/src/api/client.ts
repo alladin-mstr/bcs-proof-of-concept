@@ -366,3 +366,10 @@ export async function getControleSeriesRun(runId: string): Promise<ControleSerie
   const response = await api.get(`/controle-series/runs/${runId}`);
   return response.data;
 }
+
+// --- Translation Rules (Polaris) ---
+
+export async function listTranslationRules(): Promise<{ id: string; code: string; rapport: string; teamId: string; teamName: string; translation: string; lastModified: string }[]> {
+  const { data } = await api.get("/translation-rules");
+  return data;
+}
