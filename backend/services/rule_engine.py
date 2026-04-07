@@ -262,6 +262,20 @@ class RuleEngine:
                     values.append(str(val) if val is not None else "")
         return values
 
+    def _resolve_spreadsheet_column(self, operand: RuleOperand) -> list[str] | None:
+        """Resolve a field_ref that references a spreadsheet column header to all values in that column."""
+        if operand.type != "field_ref" or not operand.ref:
+            return None
+        field_label = operand.ref.field_label
+        for grid in self.grid_data.values():
+            if field_label in grid.get("headers", []):
+                col_idx = grid["headers"].index(field_label)
+                return [
+                    str(row[col_idx]) if col_idx < len(row) and row[col_idx] is not None else ""
+                    for row in grid["rows"]
+                ]
+        return None
+
     def evaluate_computation(self, rule: TemplateRule) -> str | None:
         """Evaluate a computation rule and return result as string."""
         comp = rule.computation
@@ -305,6 +319,9 @@ class RuleEngine:
                 col_values = self.resolve_column(comp.operands[0])
             elif comp.operands and comp.operands[0].type == "range_ref":
                 col_values = self.resolve_range(comp.operands[0])
+            elif comp.operands and comp.operands[0].type == "field_ref":
+                # Spreadsheet column: resolve all values from grid by matching header name
+                col_values = self._resolve_spreadsheet_column(comp.operands[0])
             if col_values is None:
                 return None
             if op == "agg_count":

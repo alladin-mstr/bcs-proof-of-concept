@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, ComputedField, Controle, ControleRunResult, Klant, ControleSeries, ControleSeriesRun } from "../types";
+import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, TemplateRuleResult, ComputedField, Controle, ControleFile, ControleRunResult, FieldResult, Klant, ControleSeries, ControleSeriesRun } from "../types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
@@ -169,6 +169,22 @@ export async function getSpreadsheetRange(
   const response = await api.get(`/spreadsheets/${spreadsheetId}/range`, {
     params: { startCol, startRow, endCol, endRow },
   });
+  return response.data;
+}
+
+// Mixed PDF + spreadsheet test with rule evaluation
+export interface TestMixedResponse {
+  file_results: { fileLabel: string; results: FieldResult[] }[];
+  template_rule_results: TemplateRuleResult[];
+  computed_values: Record<string, string>;
+}
+
+export async function testMixedExtraction(
+  files: ControleFile[],
+  rules: TemplateRule[] = [],
+  computed_fields: ComputedField[] = [],
+): Promise<TestMixedResponse> {
+  const response = await api.post("/test-mixed", { files, rules, computed_fields });
   return response.data;
 }
 

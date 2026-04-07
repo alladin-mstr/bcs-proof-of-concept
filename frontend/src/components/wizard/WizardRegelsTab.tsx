@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAppStore } from "@/store/appStore";
 import RulesPanel from "@/components/rules/RulesPanel";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { testExtraction } from "@/api/client";
+import { testExtraction, testMixedExtraction } from "@/api/client";
 import { Play, Loader2, CheckCircle, XCircle, AlertTriangle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Controle, RuleNodeData, TemplateRule, ExtractionResponse } from "@/types";
@@ -174,40 +174,57 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
   }, [saveRulesToWizard]);
 
   const handlePreviewRun = useCallback(async () => {
-    const filesWithPdf = controle.files.filter((f) => f.pdfId && f.fields.length > 0);
-    if (filesWithPdf.length === 0) return;
+    const filesWithData = controle.files.filter((f) =>
+      (f.fileType === "pdf" && f.pdfId && f.fields.length > 0) ||
+      (f.fileType === "spreadsheet" && f.spreadsheetId)
+    );
+    if (filesWithData.length === 0) return;
+
+    const hasSpreadsheet = filesWithData.some((f) => f.fileType === "spreadsheet");
 
     setRunning(true);
     setPreviewError(null);
     try {
-      // 1. Extract fields per file (no rules — just field extraction)
-      const fileResults: FilePreviewResult[] = [];
-      for (const file of filesWithPdf) {
-        const response = await testExtraction(file.pdfId!, file.fields);
-        fileResults.push({ fileLabel: file.label, response });
+      if (hasSpreadsheet) {
+        // Use mixed endpoint that handles both PDF + spreadsheet
+        const mixed = await testMixedExtraction(filesWithData, templateRules, computedFields);
+        const fileResults: FilePreviewResult[] = mixed.file_results.map((fr, i) => ({
+          fileLabel: fr.fileLabel,
+          response: {
+            pdf_id: filesWithData[i]?.pdfId || filesWithData[i]?.spreadsheetId || "",
+            template_id: "test",
+            results: fr.results,
+            needs_review: fr.results.some((r) => r.status !== "ok"),
+            template_rule_results: i === 0 ? mixed.template_rule_results : [],
+            computed_values: i === 0 ? mixed.computed_values : {},
+          },
+        }));
+        setPreviewResults(fileResults);
+      } else {
+        // PDF-only: use existing flow
+        const fileResults: FilePreviewResult[] = [];
+        const pdfFiles = filesWithData.filter((f) => f.fileType === "pdf");
+        for (const file of pdfFiles) {
+          const response = await testExtraction(file.pdfId!, file.fields);
+          fileResults.push({ fileLabel: file.label, response });
+        }
+        const allFields = pdfFiles.flatMap((f) => f.fields);
+        const rulesResponse = await testExtraction(
+          pdfFiles[0].pdfId!,
+          allFields,
+          undefined,
+          templateRules,
+          computedFields,
+        );
+        if (fileResults.length > 0) {
+          fileResults[0].response = {
+            ...fileResults[0].response,
+            template_rule_results: rulesResponse.template_rule_results,
+            computed_values: rulesResponse.computed_values,
+          };
+        }
+        setPreviewResults(fileResults);
       }
-
-      // 2. Run one combined call with ALL fields + rules for rule evaluation
-      // Use the first file's PDF as the base, send all fields together
-      const allFields = filesWithPdf.flatMap((f) => f.fields);
-      const rulesResponse = await testExtraction(
-        filesWithPdf[0].pdfId!,
-        allFields,
-        undefined,
-        templateRules,
-        computedFields,
-      );
-
-      // Attach rule results to the first file's response for display
-      if (fileResults.length > 0) {
-        fileResults[0].response = {
-          ...fileResults[0].response,
-          template_rule_results: rulesResponse.template_rule_results,
-          computed_values: rulesResponse.computed_values,
-        };
-      }
-
-      setPreviewResults(fileResults);
       setTab("resultaten");
     } catch {
       setPreviewError("Preview mislukt. Controleer of de backend draait.");
@@ -585,7 +602,10 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
             <Button
               className="w-full"
               onClick={handlePreviewRun}
-              disabled={running || controle.files.every((f) => !f.pdfId || f.fields.length === 0)}
+              disabled={running || controle.files.every((f) => {
+                if (f.fileType === "spreadsheet") return !f.spreadsheetId;
+                return !f.pdfId || f.fields.length === 0;
+              })}
             >
               {running ? (
                 <>
