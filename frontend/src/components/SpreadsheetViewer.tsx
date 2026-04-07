@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useAppStore } from "@/store/appStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,15 @@ export function SpreadsheetViewer({ fileId }: { fileId: string }) {
   const addField = useAppStore((s) => s.addField);
   const removeField = useAppStore((s) => s.removeField);
   const updateFieldLabel = useAppStore((s) => s.updateFieldLabel);
+  const loadFileIntoStore = useAppStore((s) => s.loadFileIntoStore);
+  const saveCurrentFileToWizard = useAppStore((s) => s.saveCurrentFileToWizard);
+
+  // Load file's existing fields into store (same as WizardFileTab for PDFs)
+  useEffect(() => {
+    saveCurrentFileToWizard(); // save any previous file first
+    loadFileIntoStore(fileId);
+    return () => { saveCurrentFileToWizard(); };
+  }, [fileId, loadFileIntoStore, saveCurrentFileToWizard]);
 
   const [drag, setDrag] = useState<DragState | null>(null);
   const isDragging = useRef(false);
