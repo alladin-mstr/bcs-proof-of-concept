@@ -105,90 +105,103 @@ export function WizardBestandenTab({
   const allHaveResults = files.every((f) => f.extractionResults !== null && f.extractionResults.length > 0);
   const canProceed = files.length > 0 && files.every((f) => f.pdfId !== null && f.label.trim().length > 0) && allHaveResults;
 
+  const dropzone = (
+    <div
+      onDrop={onDrop}
+      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+      onDragLeave={() => setIsDragOver(false)}
+      className={`
+        flex flex-col items-center justify-center cursor-pointer transition-colors
+        border-2 border-dashed rounded-2xl
+        ${files.length > 0
+          ? "w-56 h-56 p-4"
+          : "w-full max-w-lg p-8"
+        }
+        ${isDragOver ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" : "border-border bg-muted hover:border-muted-foreground/50"}
+      `}
+      onClick={() => document.getElementById("wizard-pdf-input")?.click()}
+    >
+      {isUploading ? (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Uploaden...</span>
+        </div>
+      ) : (
+        <>
+          <Upload className={`text-muted-foreground mb-2 ${files.length > 0 ? "h-6 w-6" : "h-8 w-8"}`} />
+          <p className="text-foreground font-medium text-sm text-center">
+            {files.length > 0 ? "Meer uploaden" : "Sleep PDF-bestanden hierheen of klik om te uploaden"}
+          </p>
+          <p className="text-muted-foreground text-xs mt-1">Alleen PDF-bestanden</p>
+        </>
+      )}
+      {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+      <input
+        id="wizard-pdf-input"
+        type="file"
+        accept="application/pdf"
+        multiple
+        className="hidden"
+        onChange={(e) => handleFiles(Array.from(e.target.files ?? []))}
+      />
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        <div className="text-center space-y-2">
-          <h2 className="text-2xl font-bold text-foreground">Bestanden</h2>
-          <p className="text-muted-foreground">
-            Upload PDF-bestanden, geef ze een label en klik om velden toe te voegen.
-          </p>
-        </div>
-
-        {/* Upload zone */}
-        <div
-          onDrop={onDrop}
-          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-          onDragLeave={() => setIsDragOver(false)}
-          className={`
-            flex flex-col items-center justify-center w-full max-w-lg mx-auto p-8
-            border-2 border-dashed rounded-2xl cursor-pointer transition-colors
-            ${isDragOver ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" : "border-border bg-muted hover:border-muted-foreground/50"}
-          `}
-          onClick={() => document.getElementById("wizard-pdf-input")?.click()}
-        >
-          {isUploading ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <span>Uploaden...</span>
-            </div>
-          ) : (
-            <>
-              <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-foreground font-medium text-sm">
-                Sleep PDF-bestanden hierheen of klik om te uploaden
-              </p>
-              <p className="text-muted-foreground text-xs mt-1">Alleen PDF-bestanden</p>
-            </>
-          )}
-          {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
-          <input
-            id="wizard-pdf-input"
-            type="file"
-            accept="application/pdf"
-            multiple
-            className="hidden"
-            onChange={(e) => handleFiles(Array.from(e.target.files ?? []))}
-          />
-        </div>
-
-        {/* File list */}
-        {files.length > 0 && (
-          <div className="w-full max-w-lg mx-auto space-y-3">
+        {files.length === 0 ? (
+          <>
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-bold text-foreground">Bestanden</h2>
+            <p className="text-muted-foreground">
+              Upload PDF-bestanden, geef ze een label en klik om velden toe te voegen.
+            </p>
+          </div>
+          {/* Centered dropzone when no files */}
+          <div className="flex flex-1 items-center justify-center min-h-[300px]">
+            {dropzone}
+          </div>
+          </>
+        ) : (
+          /* Cards grid with dropzone as last card */
+          <div className="flex flex-wrap gap-4">
             {files.map((file) => (
               <div
                 key={file.id}
-                className="rounded-xl border border-border bg-card overflow-hidden hover:border-primary/30 transition-colors"
+                className="w-56 rounded-xl border border-border bg-card overflow-hidden hover:border-primary/30 transition-colors flex flex-col"
               >
-                {/* File header */}
-                <div className="flex items-center gap-3 px-5 py-4">
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    <FileText className="h-5 w-5 text-primary" />
+                {/* Card body */}
+                <div className="flex-1 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <FileText className="h-5 w-5 text-primary" />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); onRemoveFile(file.id); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0">
                     <Input
                       value={file.label}
                       onChange={(e) => onUpdateLabel(file.id, e.target.value)}
-                      placeholder="Label (bijv. loonstrook, factuur...)"
-                      className="h-9 text-sm font-medium border-transparent bg-transparent px-0 hover:bg-muted/50 hover:px-2 focus:bg-background focus:px-2 focus:border-border transition-all"
+                      placeholder="Label..."
+                      className="h-8 text-sm font-medium border-transparent bg-transparent px-0 hover:bg-muted/50 hover:px-2 focus:bg-background focus:px-2 focus:border-border transition-all"
                       onClick={(e) => e.stopPropagation()}
                     />
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate px-0">
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
                       {file.pdfFilename}
                     </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => { e.stopPropagation(); onRemoveFile(file.id); }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
 
-                {/* File footer */}
-                <div className="flex items-center justify-between px-5 py-3 bg-muted/30 border-t border-border">
+                {/* Card footer */}
+                <div className="px-4 py-3 bg-muted/30 border-t border-border space-y-2">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {file.fields.length > 0 ? (
                       <>
@@ -202,14 +215,16 @@ export function WizardBestandenTab({
                   <Button
                     variant="outline"
                     size="sm"
+                    className="w-full"
                     onClick={() => onOpenFile(file.id)}
                   >
-                    {file.fields.length > 0 ? "Velden bewerken" : "Velden toevoegen"}
+                    {file.fields.length > 0 ? "Bewerken" : "Velden toevoegen"}
                     <ChevronRight className="h-3.5 w-3.5 ml-1.5" />
                   </Button>
                 </div>
               </div>
             ))}
+            {dropzone}
           </div>
         )}
       </div>
