@@ -96,7 +96,8 @@ async def remove_series(series_id: str):
 # ── Run series ───────────────────────────────────────────────────────
 
 class RunSeriesRequest(BaseModel):
-    files: dict[str, dict[str, str]]  # step_id -> { file_id -> pdf_id }
+    files: dict[str, dict[str, list[str] | str]]  # step_id -> { file_id -> [pdf_id, ...] or pdf_id }
+    filenames: dict[str, str] = {}  # pdf_id -> filename (optional)
 
 
 @router.post("/{series_id}/run", response_model=ControleSeriesRun)
@@ -158,38 +159,50 @@ async def run_series(series_id: str, data: RunSeriesRequest):
             continue
 
         # ── Run the controle (reuse logic from controles router) ──
-        step_files = data.files.get(step.id, {})
+        step_files_raw = data.files.get(step.id, {})
+        step_files: dict[str, list[str]] = {}
+        for key, val in step_files_raw.items():
+            if isinstance(val, str):
+                step_files[key] = [val]
+            else:
+                step_files[key] = val
         responses: list[ExtractionResponse] = []
 
         try:
             for file_def in controle.files:
-                pdf_id = step_files.get(file_def.id)
-                if not pdf_id:
+                is_first_file_def = file_def.id == controle.files[0].id
+                pdf_ids = step_files.get(file_def.id, [])
+                if not pdf_ids:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Missing PDF for file '{file_def.label}' (id: {file_def.id}) in step '{step.controleName}'.",
                     )
-                if not storage.pdf_exists(pdf_id):
-                    raise HTTPException(status_code=404, detail=f"PDF {pdf_id} not found.")
 
-                with storage.pdf_temp_path(pdf_id) as pdf_path:
-                    field_results, rule_results, computed_values = extract_all_fields(
-                        pdf_path=pdf_path,
-                        fields=file_def.fields,
-                        template_rules=controle.rules if file_def.id == controle.files[0].id else [],
-                        computed_fields=controle.computedFields if file_def.id == controle.files[0].id else [],
+                for pdf_id in pdf_ids:
+                    if not storage.pdf_exists(pdf_id):
+                        raise HTTPException(status_code=404, detail=f"PDF {pdf_id} not found.")
+
+                    pdf_filename = data.filenames.get(pdf_id, pdf_id)
+
+                    with storage.pdf_temp_path(pdf_id) as pdf_path:
+                        field_results, rule_results, computed_values = extract_all_fields(
+                            pdf_path=pdf_path,
+                            fields=file_def.fields,
+                            template_rules=controle.rules if is_first_file_def else [],
+                            computed_fields=controle.computedFields if is_first_file_def else [],
+                            template_id=step.controleId,
+                            series_context=series_context,
+                        )
+
+                    responses.append(ExtractionResponse(
+                        pdf_id=pdf_id,
                         template_id=step.controleId,
-                        series_context=series_context,
-                    )
-
-                responses.append(ExtractionResponse(
-                    pdf_id=pdf_id,
-                    template_id=step.controleId,
-                    results=field_results,
-                    needs_review=any(r.status != "ok" for r in field_results),
-                    template_rule_results=rule_results,
-                    computed_values=computed_values,
-                ))
+                        results=field_results,
+                        needs_review=any(r.status != "ok" for r in field_results),
+                        template_rule_results=rule_results,
+                        computed_values=computed_values,
+                        source_filename=pdf_filename,
+                    ))
 
             # ── Build and persist ControleRunResult ──
             total_fields = sum(len(r.results) for r in responses)
@@ -206,9 +219,8 @@ async def run_series(series_id: str, data: RunSeriesRequest):
 
             # Collect entries for reuse in series_context
             entries: list[TestRunEntry] = []
-            for i, r in enumerate(responses):
-                file_label = controle.files[i].label if i < len(controle.files) else f"File {i+1}"
-                prefix = f"{file_label} → " if len(controle.files) > 1 else ""
+            for r in responses:
+                prefix = f"{r.source_filename} → " if r.source_filename and len(responses) > 1 else ""
                 for fr in r.results:
                     entries.append(TestRunEntry(
                         label=f"{prefix}{fr.label}",
@@ -233,7 +245,7 @@ async def run_series(series_id: str, data: RunSeriesRequest):
                 rulesTotal=len(all_rule_results),
                 fileResults=[
                     {
-                        "fileLabel": controle.files[i].label if i < len(controle.files) else f"File {i+1}",
+                        "fileLabel": r.source_filename or f"File {i+1}",
                         "passed": len([f for f in r.results if f.status == "ok"]),
                         "total": len(r.results),
                     }
