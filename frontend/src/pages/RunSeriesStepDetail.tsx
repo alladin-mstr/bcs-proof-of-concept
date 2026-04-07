@@ -46,12 +46,25 @@ export default function RunSeriesStepDetail() {
 
         const groups: FileGroup[] = [];
         if (controle) {
+          // Track which details have been assigned to avoid duplicates
+          const usedDetailIndices = new Set<number>();
           for (const fileDef of controle.files) {
-            const matching = details.filter((d) => d.template_id === controle!.id);
-            if (matching.length > 0) {
+            const fileDefDetails: ExtractionResponse[] = [];
+            for (let i = 0; i < details.length; i++) {
+              if (usedDetailIndices.has(i)) continue;
+              // Match by checking if the detail has fields matching this file def's field labels
+              const fileDefFieldLabels = new Set(fileDef.fields.map((f) => f.label));
+              const detailFieldLabels = new Set(details[i].results.map((r) => r.label));
+              const hasOverlap = [...fileDefFieldLabels].some((l) => detailFieldLabels.has(l));
+              if (hasOverlap) {
+                fileDefDetails.push(details[i]);
+                usedDetailIndices.add(i);
+              }
+            }
+            if (fileDefDetails.length > 0) {
               groups.push({
                 label: fileDef.label,
-                files: matching.map((fr) => {
+                files: fileDefDetails.map((fr) => {
                   const passed = fr.results.filter((r) => r.status === "ok").length;
                   return {
                     fileId: fr.pdf_id,

@@ -209,14 +209,26 @@ async def run_series(series_id: str, data: RunSeriesRequest):
                             value = ", ".join(values)
 
                         extracted_values[field.label] = value
-                        field_results.append(FieldResult(
+                        fr_kwargs: dict = dict(
                             label=field.label,
                             field_type=field.type,
                             value=value,
                             status="ok" if value else "empty",
                             rule_results=[],
                             step_traces=[],
-                        ))
+                        )
+                        if field.type == "cell" and field.cell_ref:
+                            fr_kwargs["value_found_x"] = field.cell_ref.col
+                            fr_kwargs["value_found_y"] = field.cell_ref.row
+                        elif field.type == "cell_range" and field.range_ref:
+                            fr_kwargs["resolved_region"] = {
+                                "page": 1,
+                                "x": field.range_ref.startCol,
+                                "y": field.range_ref.startRow,
+                                "width": field.range_ref.endCol - field.range_ref.startCol,
+                                "height": field.range_ref.endRow - field.range_ref.startRow,
+                            }
+                        field_results.append(FieldResult(**fr_kwargs))
 
                     rule_results_list = []
                     computed_values: dict[str, str] = {}

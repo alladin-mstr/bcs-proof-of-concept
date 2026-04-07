@@ -164,8 +164,8 @@ export default function BboxCanvas({ pageWidth, pageHeight, source, readOnly = f
     if (readOnly && resultsOverride) {
       return resultsOverride
         .filter((r) => r.resolved_region)
-        .map((r): Field => ({
-          id: r.label,
+        .map((r, i): Field => ({
+          id: `result-${i}-${r.label}`,
           label: r.label,
           type: r.field_type === "cell" || r.field_type === "cell_range" ? "static" : r.field_type,
           anchor_mode: "static",
