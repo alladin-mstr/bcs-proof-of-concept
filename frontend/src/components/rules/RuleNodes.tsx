@@ -632,14 +632,19 @@ export const PolarisLookupNode = memo(({ id, data }: NodeProps & { data: RuleNod
 
       <EditableName id={id} name={data.outputLabel} textClass="text-[9px] text-violet-500 dark:text-violet-400" />
       {data.lastValue !== undefined && (
-        <div className="text-[10px] text-violet-600/60 dark:text-violet-400/60 truncate" title={data.lastValue}>
+        <div className="text-[10px] text-violet-600 dark:text-violet-400 mt-0.5">
           {(() => {
             try {
               const parsed = JSON.parse(data.lastValue);
-              const keys = Object.keys(parsed);
-              return `${keys.length} groups`;
+              const entries = Object.entries(parsed);
+              const totalSignals = entries.reduce((sum, [, v]) => sum + (v as any[]).length, 0);
+              return (
+                <div className="space-y-0.5">
+                  <div className="font-medium">{entries.length} medewerkers · {totalSignals} signalen</div>
+                </div>
+              );
             } catch {
-              return data.lastValue;
+              return <span className="truncate">{data.lastValue}</span>;
             }
           })()}
         </div>

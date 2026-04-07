@@ -534,9 +534,51 @@ export function WizardRegelsTab({ controle }: WizardRegelsTabProps) {
                                       )}
                                     </td>
                                     {/* Resultaat */}
-                                    <td className="px-3 py-2.5 text-right max-w-[160px]">
+                                    <td className="px-3 py-2.5 text-right max-w-[400px]">
                                       {rr.computed_value ? (
-                                        <span className="font-mono font-medium text-foreground">= {rr.computed_value}</span>
+                                        (() => {
+                                          // Try to render polaris lookup results as grouped table
+                                          try {
+                                            const obj = JSON.parse(rr.computed_value);
+                                            if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+                                              const firstVal = Object.values(obj)[0];
+                                              if (Array.isArray(firstVal) && firstVal.length > 0 && 'code' in (firstVal as any)[0]) {
+                                                const entries = Object.entries(obj) as [string, {code: string; translation: string}[]][];
+                                                return (
+                                                  <div className="text-left max-h-[300px] overflow-y-auto">
+                                                    <table className="w-full text-[11px] border-collapse">
+                                                      <thead>
+                                                        <tr className="border-b border-violet-200 dark:border-violet-800">
+                                                          <th className="px-2 py-1 text-left font-semibold text-violet-600 dark:text-violet-400 w-24">Medewerker</th>
+                                                          <th className="px-2 py-1 text-left font-semibold text-violet-600 dark:text-violet-400">Signalen</th>
+                                                        </tr>
+                                                      </thead>
+                                                      <tbody>
+                                                        {entries.map(([key, signals]) => (
+                                                          <tr key={key} className="border-b border-border/30 align-top">
+                                                            <td className="px-2 py-1.5 font-mono font-medium text-foreground whitespace-nowrap">{key}</td>
+                                                            <td className="px-2 py-1.5">
+                                                              <div className="flex flex-col gap-0.5">
+                                                                {signals.map((sig, si) => (
+                                                                  <div key={si} className="flex items-start gap-1.5">
+                                                                    <code className="bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 px-1 rounded text-[10px] font-bold shrink-0 mt-px">{sig.code}</code>
+                                                                    <span className="text-muted-foreground text-[10px] leading-tight">{sig.translation || <em className="text-amber-500">geen vertaling</em>}</span>
+                                                                  </div>
+                                                                ))}
+                                                              </div>
+                                                            </td>
+                                                          </tr>
+                                                        ))}
+                                                      </tbody>
+                                                    </table>
+                                                    <div className="text-[10px] text-violet-500 mt-1 font-medium">{entries.length} medewerkers · {entries.reduce((sum, [, s]) => sum + s.length, 0)} signalen</div>
+                                                  </div>
+                                                );
+                                              }
+                                            }
+                                          } catch { /* not polaris JSON, fall through */ }
+                                          return <span className="font-mono font-medium text-foreground">= {rr.computed_value}</span>;
+                                        })()
                                       ) : rr.passed ? (
                                         <span className="text-green-600 font-medium">OK</span>
                                       ) : (

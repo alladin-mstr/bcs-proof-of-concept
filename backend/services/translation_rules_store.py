@@ -15,6 +15,7 @@ def list_translation_rules() -> list[TranslationRule]:
 
 def get_translation_rules_dict() -> dict[str, str]:
     """Return a dict mapping signal code -> translation text for rule engine use."""
+    seed_translation_rules_if_empty()
     rules = list_translation_rules()
     return {rule.code: rule.translation for rule in rules}
 
