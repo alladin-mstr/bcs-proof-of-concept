@@ -60,14 +60,27 @@ class FieldRef(BaseModel):
     test_run_id: str | None = None          # when resolution = "specific_run"
 
 
+class CellRange(BaseModel):
+    """A cell range in a spreadsheet."""
+    startCol: int
+    startRow: int
+    endCol: int
+    endRow: int
+
+
 class RuleOperand(BaseModel):
     """An operand in a rule expression."""
-    type: Literal["field_ref", "literal", "computed_ref", "column_ref"]
+    type: Literal["field_ref", "literal", "computed_ref", "column_ref", "formula", "range_ref"]
     ref: FieldRef | None = None             # when type = "field_ref" or "column_ref"
     value: str | None = None                # when type = "literal"
     datatype: DataType | None = None        # when type = "literal"
     computed_id: str | None = None          # when type = "computed_ref"
     column_label: str | None = None         # when type = "column_ref"
+    # Spreadsheet formula
+    expression: str | None = None           # when type = "formula"
+    spreadsheet_id: str | None = None       # when type = "formula" or "range_ref"
+    # Cell range
+    range: CellRange | None = None          # when type = "range_ref"
 
 
 class Condition(BaseModel):
@@ -211,14 +224,20 @@ class TableConfig(BaseModel):
 ExtractionMode = Literal["strict", "word", "line", "edge", "paragraph"]
 
 
+class CellRef(BaseModel):
+    """A single cell reference in a spreadsheet."""
+    col: int
+    row: int
+
+
 class Field(BaseModel):
     """A labeled extraction field in a template."""
     id: str
     label: str
-    type: Literal["static", "dynamic", "table"]
+    type: Literal["static", "dynamic", "table", "cell", "cell_range"]
     anchor_mode: Literal["static", "single", "bracket", "area_value", "area_locator", "area_bracket"] = "static"
     anchors: list[Anchor] = []
-    value_region: Region
+    value_region: Region | None = None
     anchor_region: Region | None = None
     expected_anchor_text: str | None = None
     rules: list[Rule] = []                  # Legacy field-level rules (kept for backward compat)
@@ -228,6 +247,8 @@ class Field(BaseModel):
     chain: list[ChainStep] = []
     source: Literal["a", "b"] = "a"
     table_config: TableConfig | None = None
+    cell_ref: CellRef | None = None
+    range_ref: CellRange | None = None
 
 
 class DetectFormatRequest(BaseModel):
@@ -271,7 +292,7 @@ class ExtractionRequest(BaseModel):
 
 class FieldResult(BaseModel):
     label: str
-    field_type: Literal["static", "dynamic", "table"]
+    field_type: Literal["static", "dynamic", "table", "cell", "cell_range"]
     value: str
     status: Literal["ok", "anchor_mismatch", "anchor_not_found", "anchor_shifted", "anchor_relocated", "empty", "rule_failed"]
     source: Literal["a", "b"] = "a"
@@ -332,13 +353,38 @@ class TestRun(BaseModel):
 
 # --- Controle (unified control entity) ---
 
+class SheetData(BaseModel):
+    """Parsed spreadsheet grid data."""
+    headers: list[str]
+    rows: list[list]  # 2D grid (row-major, excludes header row)
+    rowCount: int
+    colCount: int
+
+
+class SpreadsheetUploadResponse(BaseModel):
+    """Response from spreadsheet upload."""
+    spreadsheet_id: str
+    filename: str
+    headers: list[str]
+    rows: list[list]
+    row_count: int
+    col_count: int
+
+
 class ControleFile(BaseModel):
     """A single file definition within a Controle."""
     id: str
     label: str
+    fileType: Literal["pdf", "spreadsheet"] = "pdf"
+    # PDF-specific
     pdfId: str | None = None
     pdfFilename: str | None = None
     pageCount: int = 0
+    # Spreadsheet-specific
+    spreadsheetId: str | None = None
+    spreadsheetFilename: str | None = None
+    sheetData: SheetData | None = None
+    # Shared
     fields: list[Field] = []
     extractionResults: list[FieldResult] | None = None
 
