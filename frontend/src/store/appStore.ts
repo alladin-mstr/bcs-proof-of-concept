@@ -723,8 +723,16 @@ export const useAppStore = create<AppState>((set) => ({
 
   initWizard: (controle, name, klantId, klantName) => {
     if (controle) {
+      // Migrate old ControleFile objects that lack fileType
+      const migratedFiles = controle.files.map((f) => ({
+        ...f,
+        fileType: (f.fileType || "pdf") as "pdf" | "spreadsheet",
+        spreadsheetId: f.spreadsheetId ?? null,
+        spreadsheetFilename: f.spreadsheetFilename ?? null,
+        sheetData: f.sheetData ?? null,
+      }));
       set({
-        wizardControle: controle,
+        wizardControle: { ...controle, files: migratedFiles },
         wizardActiveTab: "bestanden",
         wizardActiveFileId: null,
         templateRules: controle.rules ?? [],
@@ -854,9 +862,9 @@ export const useAppStore = create<AppState>((set) => ({
       if (!file) return {};
       return {
         wizardActiveFileId: fileId,
-        pdfId: file.pdfId,
-        pdfFilename: file.pdfFilename,
-        pageCount: file.pageCount,
+        pdfId: file.fileType === "pdf" ? file.pdfId : null,
+        pdfFilename: file.fileType === "pdf" ? file.pdfFilename : null,
+        pageCount: file.fileType === "pdf" ? file.pageCount : 0,
         currentPage: 1,
         fields: file.fields,
         extractionResults: file.extractionResults,
