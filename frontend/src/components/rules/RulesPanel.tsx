@@ -92,9 +92,12 @@ const NODE_MENU_ITEMS: {
   { type: 'table_row_filter', label: 'Row Filter (count)', category: 'Table', icon: <Search className={ICN} />, defaults: { rowFilterMode: 'count' as RowFilterMode } },
   { type: 'table_row_filter', label: 'Row Filter (all?)', category: 'Table', icon: <ListChecks className={ICN} />, defaults: { rowFilterMode: 'all_pass' as RowFilterMode } },
   { type: 'table_row_filter', label: 'Row Filter (any?)', category: 'Table', icon: <CircleDot className={ICN} />, defaults: { rowFilterMode: 'any_pass' as RowFilterMode } },
+  // Spreadsheet
+  { type: 'formula', label: 'Formula', category: 'Spreadsheet', icon: <Sigma className={ICN} />, defaults: { formulaExpression: '' } },
+  { type: 'cell_range', label: 'Cell Range', category: 'Spreadsheet', icon: <BarChart3 className={ICN} />, defaults: { rangeExpression: '' } },
 ];
 
-const CATEGORIES = ['Input', 'Math', 'Logic', 'Validate', 'Conditionals', 'Table'];
+const CATEGORIES = ['Input', 'Math', 'Logic', 'Validate', 'Conditionals', 'Table', 'Spreadsheet'];
 
 const CATEGORY_COLORS: Record<string, string> = {
   Input: 'text-slate-600 dark:text-slate-400',
@@ -103,6 +106,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Validate: 'text-purple-600 dark:text-purple-400',
   Conditionals: 'text-orange-600 dark:text-orange-400',
   Table: 'text-teal-600 dark:text-teal-400',
+  Spreadsheet: 'text-green-600 dark:text-green-400',
 };
 
 export default function RulesPanel() {
@@ -202,6 +206,55 @@ export default function RulesPanel() {
     setComputedFields(computedFields);
   }, [ruleNodes, ruleEdges, activeTemplateId, setTemplateRules, setComputedFields]);
 
+  const wizardControle = useAppStore((s) => s.wizardControle);
+  const spreadsheetColumnsImported = useRef(false);
+
+  const visibleCategories = useMemo(() => {
+    const hasSpreadsheet = wizardControle?.files.some((f) => f.fileType === "spreadsheet");
+    if (hasSpreadsheet) return CATEGORIES;
+    return CATEGORIES.filter((c) => c !== 'Spreadsheet');
+  }, [wizardControle]);
+
+  useEffect(() => {
+    if (spreadsheetColumnsImported.current || !wizardControle) return;
+    const ssFiles = wizardControle.files.filter((f) => f.fileType === "spreadsheet" && f.sheetData);
+    if (ssFiles.length === 0) return;
+
+    const existingFieldIds = new Set(
+      ruleNodes.filter(n => n.id.startsWith('field-')).map(n => n.id)
+    );
+    const newNodes: typeof ruleNodes = [];
+
+    for (const file of ssFiles) {
+      if (!file.sheetData) continue;
+      file.sheetData.headers.forEach((header, colIdx) => {
+        const nodeId = `field-ss-${file.id}-col-${colIdx}`;
+        if (existingFieldIds.has(nodeId)) return;
+        newNodes.push({
+          id: nodeId,
+          type: 'field_input' as const,
+          position: { x: 0, y: (existingFieldIds.size + newNodes.length) * 80 },
+          data: {
+            label: header,
+            nodeType: 'field_input' as const,
+            fieldRef: {
+              field_label: header,
+              file_id: file.id,
+              file_label: file.label,
+            },
+            literalDatatype: 'string',
+            fieldType: 'cell_range',
+          } as RuleNodeData,
+        });
+      });
+    }
+
+    if (newNodes.length > 0) {
+      setRuleNodes([...ruleNodes, ...newNodes]);
+      spreadsheetColumnsImported.current = true;
+    }
+  }, [wizardControle, ruleNodes, setRuleNodes]);
+
   const templateMode = useAppStore((s) => s.templateMode);
 
   // Auto-save rule graph to the current template (debounced)
@@ -296,6 +349,11 @@ export default function RulesPanel() {
       // Aggregate nodes accept table_column or table field_input
       if (tgt?.type === 'table_aggregate') {
         return src?.type === 'table_column' || isTableFieldInput(src);
+      }
+
+      // Cell range output can connect to aggregate, math, or formula nodes
+      if (src?.type === 'cell_range') {
+        return tgt?.type === 'table_aggregate' || tgt?.type === 'math_operation' || tgt?.type === 'formula';
       }
 
       return true;
@@ -646,7 +704,7 @@ export default function RulesPanel() {
           <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />
           <div className="fixed right-auto top-auto z-50 w-72 bg-popover border border-border rounded-lg shadow-lg overflow-hidden" style={{ top: (document.querySelector('[data-add-node-btn]') as HTMLElement)?.getBoundingClientRect().bottom ?? 48, right: window.innerWidth - ((document.querySelector('[data-add-node-btn]') as HTMLElement)?.getBoundingClientRect().right ?? 0) }}>
             <div className="flex border-b border-border">
-              {CATEGORIES.map((cat) => (
+              {visibleCategories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setMenuCategory(cat)}
