@@ -35,6 +35,12 @@ function operandFromNode(node: Node | undefined): RuleOperand | null {
     || node.type === 'table_aggregate' || node.type === 'table_row_filter') {
     return { type: 'computed_ref' as const, computed_id: node.id };
   }
+  if (node.type === 'formula') {
+    return { type: 'computed_ref' as const, computed_id: node.id };
+  }
+  if (node.type === 'cell_range') {
+    return { type: 'computed_ref' as const, computed_id: node.id };
+  }
   return null;
 }
 
@@ -282,6 +288,66 @@ export function serializeGraph(
           output_datatype: data.outputDatatype,
           condition,
           row_filter_mode: mode,
+        },
+      });
+
+      computedFields.push({
+        id: node.id,
+        label: name,
+        template_id: templateId,
+        rule_id: node.id,
+        datatype: data.outputDatatype,
+      });
+    }
+
+    if (node.type === 'formula') {
+      const name = getNodeName(data, `formula(${(data.formulaExpression || '').slice(0, 20)})`);
+      const spreadsheetId = data.spreadsheetId || '';
+
+      rules.push({
+        id: node.id,
+        name,
+        type: 'computation',
+        enabled: true,
+        computation: {
+          operation: 'add' as MathOperation,
+          operands: [{
+            type: 'formula',
+            expression: data.formulaExpression || '',
+            spreadsheet_id: spreadsheetId,
+          } as unknown as RuleOperand],
+          output_label: name,
+          output_datatype: data.outputDatatype,
+        },
+      });
+
+      computedFields.push({
+        id: node.id,
+        label: name,
+        template_id: templateId,
+        rule_id: node.id,
+        datatype: data.outputDatatype,
+      });
+    }
+
+    if (node.type === 'cell_range') {
+      const name = getNodeName(data, `range(${data.rangeExpression || '?'})`);
+      const spreadsheetId = data.spreadsheetId || '';
+
+      rules.push({
+        id: node.id,
+        name,
+        type: 'computation',
+        enabled: true,
+        computation: {
+          operation: 'sum' as MathOperation,
+          operands: [{
+            type: 'range_ref',
+            spreadsheet_id: spreadsheetId,
+            range: data.cellRange || { startCol: 0, startRow: 0, endCol: 0, endRow: 0 },
+          } as unknown as RuleOperand],
+          output_label: name,
+          output_datatype: data.outputDatatype,
         },
       });
 
