@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, CheckCircle, AlertTriangle, Clock, TrendingUp, Users, ArrowRight, Sparkles, FileCheck } from "lucide-react";
+import { Plus, CheckCircle, AlertTriangle, Clock, TrendingUp, ArrowRight, Sparkles, FileCheck, Play } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,36 +13,41 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTaskContext } from "@/context/TaskContext";
+import { listControleRuns } from "@/api/client";
+import type { ControleRunResult } from "@/types";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { getAllControlRuns, currentUser } = useTaskContext();
+  const { currentUser } = useTaskContext();
+  const [runs, setRuns] = useState<ControleRunResult[]>([]);
 
-  const allRuns = getAllControlRuns();
+  useEffect(() => {
+    listControleRuns().then(setRuns).catch(() => {});
+  }, []);
 
-  // Fixed demo stats from mega-prompt
-  const controlesThisMonth = 47;
-  const avgDoorlooptijd = 12;
-  const bevindingen = 203;
+  // Stats derived from real runs
+  const controlesThisMonth = runs.length;
+  const bevindingen = runs.reduce((sum, r) => sum + r.failedFields, 0);
 
-  // Recent controls (top 5 across all teams)
-  const recentControls = allRuns.slice(0, 5);
+  // Recent controls (top 5, newest first)
+  const recentControls = [...runs]
+    .sort((a, b) => new Date(b.runAt).getTime() - new Date(a.runAt).getTime())
+    .slice(0, 5);
 
-  const formatDate = (date: Date) => {
-    const d = new Date(date);
-    return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + ', ' + d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  const formatDate = (date: Date | string) => {
+    return new Date(date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  const getStatusBadge = (run: typeof allRuns[0]) => {
-    if (run.status === 'success') {
+  const getStatusBadge = (status: ControleRunResult["status"]) => {
+    if (status === 'success') {
       return (
         <Badge variant="outline" className="text-success border-success/30 bg-success/10 gap-1">
           <CheckCircle className="h-3 w-3" />
-          Afgerond
+          Geslaagd
         </Badge>
       );
     }
-    if (run.status === 'review') {
+    if (status === 'review') {
       return (
         <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10 gap-1">
           <AlertTriangle className="h-3 w-3" />
@@ -50,9 +56,9 @@ export default function Dashboard() {
       );
     }
     return (
-      <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10 gap-1">
+      <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10 gap-1">
         <Clock className="h-3 w-3" />
-        In behandeling
+        Mislukt
       </Badge>
     );
   };
@@ -71,12 +77,12 @@ export default function Dashboard() {
             Controle assistent
           </h1>
           <p className="text-muted-foreground max-w-xl">
-            Beheer en automatiseer al je controles op één plek. Upload rapporten, pas regels toe, 
+            Beheer en automatiseer al je controles op één plek. Upload rapporten, pas regels toe,
             en ontvang direct terugkoppeling.
           </p>
           <div className="flex flex-wrap gap-3 mt-6">
             <Button asChild size="lg" className="rounded-full shadow-lg hover:shadow-xl transition-shadow">
-              <Link to="/controle">
+              <Link to="/controle/nieuw">
                 <Plus className="mr-2 h-5 w-5" />
                 Nieuwe controle
               </Link>
@@ -94,7 +100,7 @@ export default function Dashboard() {
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Controles deze maand</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Controles uitgevoerd</CardTitle>
             <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
               <FileCheck className="h-5 w-5 text-primary" />
             </div>
@@ -106,19 +112,19 @@ export default function Dashboard() {
 
         <Card className="shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Gem. doorlooptijd</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Geslaagd</CardTitle>
             <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center">
               <TrendingUp className="h-5 w-5 text-success" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold text-foreground">{avgDoorlooptijd} min</div>
+            <div className="text-4xl font-bold text-foreground">{runs.filter(r => r.status === "success").length}</div>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Bevindingen gevangen</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Bevindingen</CardTitle>
             <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center">
               <AlertTriangle className="h-5 w-5 text-warning" />
             </div>
@@ -144,35 +150,55 @@ export default function Dashboard() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Controle</TableHead>
                 <TableHead>Klant</TableHead>
-                <TableHead>Template</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Velden</TableHead>
+                <TableHead>Regels</TableHead>
                 <TableHead>Datum</TableHead>
-                <TableHead className="text-right">Bevindingen</TableHead>
-                <TableHead>Controleur</TableHead>
+                <TableHead className="text-right">Acties</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {recentControls.map((run) => (
-                <TableRow 
-                  key={run.id} 
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/resultaten/${run.id}`)}
-                >
-                  <TableCell className="font-medium">{run.clientName}</TableCell>
-                  <TableCell className="text-muted-foreground">{run.templateName}</TableCell>
-                  <TableCell>{getStatusBadge(run)}</TableCell>
-                  <TableCell className="text-muted-foreground">{formatDate(run.runAt)}</TableCell>
-                  <TableCell className="text-right">
-                    {(run.bevindingen ?? run.deviations.length) > 0 ? (
-                      <span>{run.bevindingen ?? run.deviations.length} opmerkingen</span>
+                <TableRow key={run.id}>
+                  <TableCell className="font-medium">{run.controleName}</TableCell>
+                  <TableCell className="text-muted-foreground">{run.klantName || "—"}</TableCell>
+                  <TableCell>{getStatusBadge(run.status)}</TableCell>
+                  <TableCell>
+                    <span className={run.failedFields > 0 ? "text-destructive" : "text-success"}>
+                      {run.passedFields}/{run.totalFields} OK
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {run.rulesTotal > 0 ? (
+                      <span className={run.rulesPassed < run.rulesTotal ? "text-warning" : "text-success"}>
+                        {run.rulesPassed}/{run.rulesTotal}
+                      </span>
                     ) : (
-                      <span className="text-success">0 afwijkingen</span>
+                      <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{run.controleurName || '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(run.runAt)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/controle/${run.controleId}/run`)}
+                    >
+                      <Play className="h-3.5 w-3.5 mr-1" />
+                      Opnieuw
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
+              {recentControls.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12">
+                    <p className="text-muted-foreground">Nog geen resultaten</p>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
