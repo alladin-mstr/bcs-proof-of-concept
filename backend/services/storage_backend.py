@@ -109,6 +109,20 @@ class StorageBackend(ABC):
     @abstractmethod
     def delete_klant(self, klant_id: str) -> bool: ...
 
+    # -- Translation Rules --
+
+    @abstractmethod
+    def save_translation_rule(self, rule_id: str, content: str) -> None: ...
+
+    @abstractmethod
+    def get_translation_rule(self, rule_id: str) -> str | None: ...
+
+    @abstractmethod
+    def list_translation_rule_ids(self) -> list[str]: ...
+
+    @abstractmethod
+    def delete_translation_rule(self, rule_id: str) -> bool: ...
+
     # -- Controle Series --
 
     @abstractmethod
@@ -168,6 +182,7 @@ class LocalStorageBackend(StorageBackend):
         self._controle_series = base_dir / "controle_series"
         self._controle_series_runs = base_dir / "controle_series_runs"
         self._spreadsheets = base_dir / "spreadsheets"
+        self._translation_rules = base_dir / "translation_rules"
         self._uploads.mkdir(parents=True, exist_ok=True)
         self._templates.mkdir(parents=True, exist_ok=True)
         self._test_runs.mkdir(parents=True, exist_ok=True)
@@ -177,6 +192,7 @@ class LocalStorageBackend(StorageBackend):
         self._controle_series.mkdir(parents=True, exist_ok=True)
         self._controle_series_runs.mkdir(parents=True, exist_ok=True)
         self._spreadsheets.mkdir(parents=True, exist_ok=True)
+        self._translation_rules.mkdir(parents=True, exist_ok=True)
 
     # -- PDFs --
 
@@ -304,6 +320,27 @@ class LocalStorageBackend(StorageBackend):
         path.unlink()
         return True
 
+    # -- Translation Rules --
+
+    def save_translation_rule(self, rule_id: str, content: str) -> None:
+        (self._translation_rules / f"{rule_id}.json").write_text(content, encoding="utf-8")
+
+    def get_translation_rule(self, rule_id: str) -> str | None:
+        path = self._translation_rules / f"{rule_id}.json"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    def list_translation_rule_ids(self) -> list[str]:
+        return [p.stem for p in sorted(self._translation_rules.glob("*.json"))]
+
+    def delete_translation_rule(self, rule_id: str) -> bool:
+        path = self._translation_rules / f"{rule_id}.json"
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
+
     # -- Controle Series --
 
     def save_controle_series(self, series_id: str, content: str) -> None:
@@ -370,7 +407,7 @@ class LocalStorageBackend(StorageBackend):
 class AzureBlobStorageBackend(StorageBackend):
     """Azure Blob Storage backend using DefaultAzureCredential."""
 
-    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs", controles_container: str = "controles", controle_runs_container: str = "controle-runs", klanten_container: str = "klanten", controle_series_container: str = "controle-series", controle_series_runs_container: str = "controle-series-runs", spreadsheets_container: str = "spreadsheets"):
+    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs", controles_container: str = "controles", controle_runs_container: str = "controle-runs", klanten_container: str = "klanten", controle_series_container: str = "controle-series", controle_series_runs_container: str = "controle-series-runs", spreadsheets_container: str = "spreadsheets", translation_rules_container: str = "translation-rules"):
         from azure.identity import DefaultAzureCredential
         from azure.storage.blob import BlobServiceClient
 
@@ -386,8 +423,9 @@ class AzureBlobStorageBackend(StorageBackend):
         self._controle_series = self._client.get_container_client(controle_series_container)
         self._controle_series_runs = self._client.get_container_client(controle_series_runs_container)
         self._spreadsheets = self._client.get_container_client(spreadsheets_container)
+        self._translation_rules = self._client.get_container_client(translation_rules_container)
         # Ensure all containers exist
-        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs, self._klanten, self._controle_series, self._controle_series_runs, self._spreadsheets]:
+        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs, self._klanten, self._controle_series, self._controle_series_runs, self._spreadsheets, self._translation_rules]:
             if not container.exists():
                 container.create_container()
 
@@ -557,6 +595,32 @@ class AzureBlobStorageBackend(StorageBackend):
 
     def delete_klant(self, klant_id: str) -> bool:
         blob_client = self._klanten.get_blob_client(f"{klant_id}.json")
+        if not blob_client.exists():
+            return False
+        blob_client.delete_blob()
+        return True
+
+    # -- Translation Rules --
+
+    def save_translation_rule(self, rule_id: str, content: str) -> None:
+        self._translation_rules.upload_blob(f"{rule_id}.json", content, overwrite=True)
+
+    def get_translation_rule(self, rule_id: str) -> str | None:
+        blob_client = self._translation_rules.get_blob_client(f"{rule_id}.json")
+        if not blob_client.exists():
+            return None
+        return blob_client.download_blob().readall().decode("utf-8")
+
+    def list_translation_rule_ids(self) -> list[str]:
+        ids = []
+        for blob in self._translation_rules.list_blobs():
+            name = blob.name
+            if name.endswith(".json"):
+                ids.append(name.removesuffix(".json"))
+        return sorted(ids)
+
+    def delete_translation_rule(self, rule_id: str) -> bool:
+        blob_client = self._translation_rules.get_blob_client(f"{rule_id}.json")
         if not blob_client.exists():
             return False
         blob_client.delete_blob()

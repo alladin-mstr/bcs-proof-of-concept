@@ -406,6 +406,17 @@ class Klant(BaseModel):
     updatedAt: datetime
 
 
+class TranslationRule(BaseModel):
+    """A translation rule from the Regelbibliotheek."""
+    id: str
+    code: str
+    rapport: str
+    teamId: str
+    teamName: str
+    translation: str
+    lastModified: datetime
+
+
 class ControleRunResult(BaseModel):
     """A persisted result of running a controle."""
     id: str

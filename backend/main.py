@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from config import CORS_ORIGINS
-from routers import extract, pdfs, templates, test_runs, controles, klanten, controle_series, spreadsheets
+from routers import extract, pdfs, templates, test_runs, controles, klanten, controle_series, spreadsheets, translation_rules
 from services.storage_backend import get_storage
 
 
@@ -38,6 +38,7 @@ app.include_router(controles.router)
 app.include_router(klanten.router)
 app.include_router(controle_series.router)
 app.include_router(spreadsheets.router)
+app.include_router(translation_rules.router)
 
 # Serve React static build if the directory exists (production / Docker)
 _static_dir = Path(__file__).resolve().parent / "static"
