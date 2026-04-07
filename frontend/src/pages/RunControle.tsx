@@ -4,7 +4,7 @@ import { getControle, runControle } from "@/api/client";
 import { HeaderAction } from "@/context/HeaderActionContext";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Play, RotateCcw } from "lucide-react";
+import { Download, Loader2, Play, RotateCcw } from "lucide-react";
 import FileUploadManager from "@/components/FileUploadManager";
 import type { SlotDefinition } from "@/components/FileUploadManager";
 import RunResultViewer from "@/components/RunResultViewer";
@@ -99,10 +99,41 @@ export default function RunControle() {
     <div className={phase === "results" ? "space-y-4" : "max-w-4xl mx-auto space-y-8"}>
       <HeaderAction>
         {phase === "results" && (
-          <Button variant="outline" className="rounded-full" size="sm" onClick={() => { setPhase("upload"); setResults(null); setAssignments({}); setPool([]); }}>
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-            Opnieuw uitvoeren
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="rounded-full" size="sm" onClick={() => {
+              if (!results || !controle) return;
+              const exportData = results.map((r) => ({
+                bestand: r.source_filename || r.pdf_id,
+                velden: r.results.map((f) => ({
+                  label: f.label,
+                  type: f.field_type,
+                  status: f.status,
+                  waarde: f.value,
+                  ...(f.table_data ? { tabel: f.table_data } : {}),
+                })),
+                regels: r.template_rule_results.map((rr) => ({
+                  regel: rr.rule_name,
+                  geslaagd: rr.passed,
+                  resultaat: rr.computed_value ?? rr.message,
+                })),
+                berekend: r.computed_values,
+              }));
+              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${controle.name.replace(/\s+/g, "_")}_resultaten.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Exporteer resultaten
+            </Button>
+            <Button variant="outline" className="rounded-full" size="sm" onClick={() => { setPhase("upload"); setResults(null); setAssignments({}); setPool([]); }}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Opnieuw uitvoeren
+            </Button>
+          </div>
         )}
       </HeaderAction>
 
