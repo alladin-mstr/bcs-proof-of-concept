@@ -109,6 +109,31 @@ class StorageBackend(ABC):
     @abstractmethod
     def delete_klant(self, klant_id: str) -> bool: ...
 
+    # -- Controle Series --
+
+    @abstractmethod
+    def save_controle_series(self, series_id: str, content: str) -> None: ...
+
+    @abstractmethod
+    def get_controle_series(self, series_id: str) -> str | None: ...
+
+    @abstractmethod
+    def list_controle_series_ids(self) -> list[str]: ...
+
+    @abstractmethod
+    def delete_controle_series(self, series_id: str) -> bool: ...
+
+    # -- Controle Series Runs --
+
+    @abstractmethod
+    def save_controle_series_run(self, run_id: str, content: str) -> None: ...
+
+    @abstractmethod
+    def get_controle_series_run(self, run_id: str) -> str | None: ...
+
+    @abstractmethod
+    def list_controle_series_run_ids(self) -> list[str]: ...
+
 
 class LocalStorageBackend(StorageBackend):
     """Filesystem-backed storage (current behaviour)."""
@@ -123,12 +148,16 @@ class LocalStorageBackend(StorageBackend):
         self._controles = base_dir / "controles"
         self._controle_runs = base_dir / "controle_runs"
         self._klanten = base_dir / "klanten"
+        self._controle_series = base_dir / "controle_series"
+        self._controle_series_runs = base_dir / "controle_series_runs"
         self._uploads.mkdir(parents=True, exist_ok=True)
         self._templates.mkdir(parents=True, exist_ok=True)
         self._test_runs.mkdir(parents=True, exist_ok=True)
         self._controles.mkdir(parents=True, exist_ok=True)
         self._controle_runs.mkdir(parents=True, exist_ok=True)
         self._klanten.mkdir(parents=True, exist_ok=True)
+        self._controle_series.mkdir(parents=True, exist_ok=True)
+        self._controle_series_runs.mkdir(parents=True, exist_ok=True)
 
     # -- PDFs --
 
@@ -256,11 +285,46 @@ class LocalStorageBackend(StorageBackend):
         path.unlink()
         return True
 
+    # -- Controle Series --
+
+    def save_controle_series(self, series_id: str, content: str) -> None:
+        (self._controle_series / f"{series_id}.json").write_text(content, encoding="utf-8")
+
+    def get_controle_series(self, series_id: str) -> str | None:
+        path = self._controle_series / f"{series_id}.json"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    def list_controle_series_ids(self) -> list[str]:
+        return [p.stem for p in sorted(self._controle_series.glob("*.json"))]
+
+    def delete_controle_series(self, series_id: str) -> bool:
+        path = self._controle_series / f"{series_id}.json"
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
+
+    # -- Controle Series Runs --
+
+    def save_controle_series_run(self, run_id: str, content: str) -> None:
+        (self._controle_series_runs / f"{run_id}.json").write_text(content, encoding="utf-8")
+
+    def get_controle_series_run(self, run_id: str) -> str | None:
+        path = self._controle_series_runs / f"{run_id}.json"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
+    def list_controle_series_run_ids(self) -> list[str]:
+        return [p.stem for p in sorted(self._controle_series_runs.glob("*.json"))]
+
 
 class AzureBlobStorageBackend(StorageBackend):
     """Azure Blob Storage backend using DefaultAzureCredential."""
 
-    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs", controles_container: str = "controles", controle_runs_container: str = "controle-runs", klanten_container: str = "klanten"):
+    def __init__(self, account_name: str, pdfs_container: str = "pdfs", templates_container: str = "templates", test_runs_container: str = "test-runs", controles_container: str = "controles", controle_runs_container: str = "controle-runs", klanten_container: str = "klanten", controle_series_container: str = "controle-series", controle_series_runs_container: str = "controle-series-runs"):
         from azure.identity import DefaultAzureCredential
         from azure.storage.blob import BlobServiceClient
 
@@ -273,8 +337,10 @@ class AzureBlobStorageBackend(StorageBackend):
         self._controles = self._client.get_container_client(controles_container)
         self._controle_runs = self._client.get_container_client(controle_runs_container)
         self._klanten = self._client.get_container_client(klanten_container)
+        self._controle_series = self._client.get_container_client(controle_series_container)
+        self._controle_series_runs = self._client.get_container_client(controle_series_runs_container)
         # Ensure all containers exist
-        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs, self._klanten]:
+        for container in [self._pdfs, self._templates, self._test_runs, self._controles, self._controle_runs, self._klanten, self._controle_series, self._controle_series_runs]:
             if not container.exists():
                 container.create_container()
 
@@ -449,6 +515,51 @@ class AzureBlobStorageBackend(StorageBackend):
         blob_client.delete_blob()
         return True
 
+    # -- Controle Series --
+
+    def save_controle_series(self, series_id: str, content: str) -> None:
+        self._controle_series.upload_blob(f"{series_id}.json", content, overwrite=True)
+
+    def get_controle_series(self, series_id: str) -> str | None:
+        blob_client = self._controle_series.get_blob_client(f"{series_id}.json")
+        if not blob_client.exists():
+            return None
+        return blob_client.download_blob().readall().decode("utf-8")
+
+    def list_controle_series_ids(self) -> list[str]:
+        ids = []
+        for blob in self._controle_series.list_blobs():
+            name = blob.name
+            if name.endswith(".json"):
+                ids.append(name.removesuffix(".json"))
+        return sorted(ids)
+
+    def delete_controle_series(self, series_id: str) -> bool:
+        blob_client = self._controle_series.get_blob_client(f"{series_id}.json")
+        if not blob_client.exists():
+            return False
+        blob_client.delete_blob()
+        return True
+
+    # -- Controle Series Runs --
+
+    def save_controle_series_run(self, run_id: str, content: str) -> None:
+        self._controle_series_runs.upload_blob(f"{run_id}.json", content, overwrite=True)
+
+    def get_controle_series_run(self, run_id: str) -> str | None:
+        blob_client = self._controle_series_runs.get_blob_client(f"{run_id}.json")
+        if not blob_client.exists():
+            return None
+        return blob_client.download_blob().readall().decode("utf-8")
+
+    def list_controle_series_run_ids(self) -> list[str]:
+        ids = []
+        for blob in self._controle_series_runs.list_blobs():
+            name = blob.name
+            if name.endswith(".json"):
+                ids.append(name.removesuffix(".json"))
+        return sorted(ids)
+
 
 # -- Singleton --
 
@@ -458,7 +569,7 @@ _instance: StorageBackend | None = None
 def get_storage() -> StorageBackend:
     global _instance
     if _instance is None:
-        from config import STORAGE_BACKEND, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_PDFS_CONTAINER, AZURE_STORAGE_TEMPLATES_CONTAINER, AZURE_STORAGE_TEST_RUNS_CONTAINER, AZURE_STORAGE_CONTROLES_CONTAINER, AZURE_STORAGE_CONTROLE_RUNS_CONTAINER, AZURE_STORAGE_KLANTEN_CONTAINER
+        from config import STORAGE_BACKEND, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_PDFS_CONTAINER, AZURE_STORAGE_TEMPLATES_CONTAINER, AZURE_STORAGE_TEST_RUNS_CONTAINER, AZURE_STORAGE_CONTROLES_CONTAINER, AZURE_STORAGE_CONTROLE_RUNS_CONTAINER, AZURE_STORAGE_KLANTEN_CONTAINER, AZURE_STORAGE_CONTROLE_SERIES_CONTAINER, AZURE_STORAGE_CONTROLE_SERIES_RUNS_CONTAINER
 
         if STORAGE_BACKEND == "azure":
             _instance = AzureBlobStorageBackend(
@@ -469,6 +580,8 @@ def get_storage() -> StorageBackend:
                 controles_container=AZURE_STORAGE_CONTROLES_CONTAINER,
                 controle_runs_container=AZURE_STORAGE_CONTROLE_RUNS_CONTAINER,
                 klanten_container=AZURE_STORAGE_KLANTEN_CONTAINER,
+                controle_series_container=AZURE_STORAGE_CONTROLE_SERIES_CONTAINER,
+                controle_series_runs_container=AZURE_STORAGE_CONTROLE_SERIES_RUNS_CONTAINER,
             )
         else:
             _instance = LocalStorageBackend()
