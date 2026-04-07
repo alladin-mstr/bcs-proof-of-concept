@@ -92,6 +92,7 @@ function EditableName({ id, name, textClass }: { id: string; name?: string; text
 export const FieldInputNode = memo(({ data }: NodeProps & { data: RuleNodeData }) => {
   const dt = data.fieldRef?.resolution ? 'cross-template' : 'local';
   const isTable = data.fieldType === 'table';
+  const isSpreadsheet = data.fieldType === 'cell' || data.fieldType === 'cell_range';
   const [showPreview, setShowPreview] = useState(false);
 
   return (
@@ -99,7 +100,9 @@ export const FieldInputNode = memo(({ data }: NodeProps & { data: RuleNodeData }
       className={`px-2.5 py-1.5 rounded-md border shadow-sm max-w-[180px] relative ${
         isTable
           ? 'border-teal-400 bg-teal-50/50 dark:bg-teal-950/50'
-          : DATATYPE_COLORS[data.literalDatatype || 'string']
+          : isSpreadsheet
+            ? 'border-green-400 bg-green-50/50 dark:bg-green-950/50'
+            : DATATYPE_COLORS[data.literalDatatype || 'string']
       }`}
       onMouseEnter={() => isTable && data.tablePreview && setShowPreview(true)}
       onMouseLeave={() => setShowPreview(false)}
@@ -110,6 +113,10 @@ export const FieldInputNode = memo(({ data }: NodeProps & { data: RuleNodeData }
             Table
             {dt !== 'local' && <span className="text-violet-500 ml-0.5">({dt})</span>}
           </span>
+        ) : isSpreadsheet ? (
+          <span className="text-green-600 dark:text-green-400">
+            Spreadsheet
+          </span>
         ) : (
           <>
             Field {dt !== 'local' && <span className="text-violet-500">({dt})</span>}
@@ -117,10 +124,18 @@ export const FieldInputNode = memo(({ data }: NodeProps & { data: RuleNodeData }
         )}
       </div>
       {data.fieldRef?.file_label && (
-        <div className="inline-flex items-center gap-1 px-1.5 py-0.5 mb-0.5 rounded text-[9px] font-semibold bg-primary/10 text-primary leading-none max-w-full truncate">
-          <svg className="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-          </svg>
+        <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 mb-0.5 rounded text-[9px] font-semibold leading-none max-w-full truncate ${
+          isSpreadsheet ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-primary/10 text-primary'
+        }`}>
+          {isSpreadsheet ? (
+            <svg className="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M9 4v16M15 4v16M4 4h16a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z" />
+            </svg>
+          ) : (
+            <svg className="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+          )}
           {data.fieldRef.file_label}
         </div>
       )}
@@ -164,7 +179,7 @@ export const FieldInputNode = memo(({ data }: NodeProps & { data: RuleNodeData }
           )}
         </div>
       )}
-      <Handle type="source" position={Position.Right} className={`${HANDLE} ${isTable ? '!bg-teal-500' : '!bg-primary'}`} />
+      <Handle type="source" position={Position.Right} className={`${HANDLE} ${isTable ? '!bg-teal-500' : isSpreadsheet ? '!bg-green-500' : '!bg-primary'}`} />
     </div>
   );
 });

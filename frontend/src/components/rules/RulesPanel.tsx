@@ -312,12 +312,13 @@ export default function RulesPanel() {
   );
 
   // Restrict condition node's "test" handle to only accept comparison nodes
-  const isTableFieldInput = useCallback(
+  const isTableOrSpreadsheetFieldInput = useCallback(
     (node: Node | undefined) => {
       if (!node || node.type !== 'field_input') return false;
       const d = node.data as RuleNodeData;
-      // Check explicit fieldType OR detect from value pattern
-      return d.fieldType === 'table' || (d.lastValue != null && /^\d+ rows? x \d+ cols?$/.test(d.lastValue));
+      // Table fields, spreadsheet column fields (cell_range), or detected from value pattern
+      return d.fieldType === 'table' || d.fieldType === 'cell_range' || d.fieldType === 'cell'
+        || (d.lastValue != null && /^\d+ rows? x \d+ cols?$/.test(d.lastValue));
     }, []
   );
 
@@ -337,7 +338,7 @@ export default function RulesPanel() {
       }
 
       // Table field_input nodes can connect to table_aggregate or table_row_filter (column handle)
-      if (isTableFieldInput(src)) {
+      if (isTableOrSpreadsheetFieldInput(src)) {
         if (tgt?.type === 'table_aggregate') return true;
         if (tgt?.type === 'table_row_filter' && connection.targetHandle === 'column') return true;
       }
@@ -349,7 +350,7 @@ export default function RulesPanel() {
 
       // Aggregate nodes accept table_column or table field_input
       if (tgt?.type === 'table_aggregate') {
-        return src?.type === 'table_column' || isTableFieldInput(src);
+        return src?.type === 'table_column' || isTableOrSpreadsheetFieldInput(src);
       }
 
       // Cell range output can connect to aggregate, math, or formula nodes
@@ -359,7 +360,7 @@ export default function RulesPanel() {
 
       return true;
     },
-    [ruleNodes, isTableFieldInput]
+    [ruleNodes, isTableOrSpreadsheetFieldInput]
   );
 
   // Load external data sources when Input tab is opened
