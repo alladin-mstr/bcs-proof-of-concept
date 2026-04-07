@@ -607,7 +607,8 @@ export default function BboxCanvas({ pageWidth, pageHeight, source, readOnly = f
               onUpdateLabel={effectiveCanEdit ? (label: string) => updateFieldLabel(field.id, label) : undefined}
               valueDragOffset={{ dx: valueDx, dy: valueDy }}
               anchorDragOffset={{ dx: anchorDx, dy: anchorDy }}
-              source={source} />
+              source={source}
+              readOnly={readOnly} />
           </g>
         );
       })}
@@ -939,7 +940,7 @@ function ChainEditOverlay({ field, pw, ph }: { field: Field; pw: number; ph: num
 }
 
 /** Renders a field with ghost boxes and shift arrows when anchor has shifted */
-function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDrag, isEditing, onSelect, onUpdateLabel, valueDragOffset, anchorDragOffset, source }: {
+function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDrag, isEditing, onSelect, onUpdateLabel, valueDragOffset, anchorDragOffset, source, readOnly = false }: {
   field: Field; pw: number; ph: number; currentPage: number; onRemove: () => void; result: FieldResult | null;
   onStartDrag?: (fieldId: string, regionType: 'value' | 'anchor', e: React.MouseEvent) => void;
   isEditing?: boolean;
@@ -948,12 +949,14 @@ function FieldOverlay({ field, pw, ph, currentPage, onRemove, result, onStartDra
   valueDragOffset: { dx: number; dy: number };
   anchorDragOffset: { dx: number; dy: number };
   source?: 'a' | 'b';
+  readOnly?: boolean;
 }) {
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(field.label);
   const labelInputRef = useRef<HTMLInputElement>(null);
   const templateMode = useAppStore((s) => s.templateMode);
-  const canEdit = useAppStore((s) => s.canDrawFields);
+  const storeCanEdit = useAppStore((s) => s.canDrawFields);
+  const canEdit = readOnly ? false : storeCanEdit;
   const setConnectDragFrom = useAppStore((s) => s.setConnectDragFrom);
   const setConnectDragMouse = useAppStore((s) => s.setConnectDragMouse);
   const isComparisonMode = source !== undefined && templateMode === 'comparison';
