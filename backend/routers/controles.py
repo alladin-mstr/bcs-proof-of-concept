@@ -23,6 +23,32 @@ router = APIRouter(prefix="/controles", tags=["controles"])
 async def create_controle(data: ControleCreate):
     controle_id = str(uuid.uuid4())
     controle = save_controle(controle_id, data)
+
+    # Auto-copy to descendants if this controle belongs to a klant with children
+    if data.klantId:
+        from services.klant_store import list_descendants, get_klant, update_klant_source_controls
+        descendants = list_descendants(data.klantId)
+        for desc in descendants:
+            new_id = str(uuid.uuid4())
+            copy_data = ControleCreate(
+                name=data.name,
+                status=data.status,
+                files=data.files,
+                rules=data.rules,
+                computedFields=data.computedFields,
+                ruleGraph=data.ruleGraph,
+                klantId=desc.id,
+                klantName=desc.name,
+            )
+            save_controle(new_id, copy_data)
+
+            # Track the source mapping on the descendant klant
+            desc_klant = get_klant(desc.id)
+            if desc_klant:
+                source_ids = dict(desc_klant.sourceControlIds or {})
+                source_ids[new_id] = controle_id
+                update_klant_source_controls(desc.id, source_ids)
+
     return controle
 
 
