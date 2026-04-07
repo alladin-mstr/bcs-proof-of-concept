@@ -472,6 +472,24 @@ export interface ControleSeriesRun {
   runAt: string;
 }
 
+// --- Run Result Viewer ---
+
+export interface FileGroup {
+  label: string;
+  files: FileEntry[];
+}
+
+export interface FileEntry {
+  fileId: string;
+  filename: string;
+  fileType: "pdf" | "spreadsheet";
+  results: FieldResult[];
+  ruleResults: TemplateRuleResult[];
+  computedValues: Record<string, string>;
+  passed: number;
+  total: number;
+}
+
 // --- Global Values ---
 
 export interface GlobalValue {
