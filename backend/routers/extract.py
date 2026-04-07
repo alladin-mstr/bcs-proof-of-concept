@@ -181,11 +181,13 @@ async def test_mixed_extraction(request: TestMixedRequest):
     rule_results: list[TemplateRuleResult] = []
     computed_values: dict[str, str] = {}
     if request.rules:
+        from services.translation_rules_store import get_translation_rules_dict
         engine = RuleEngine(
             current_template_id="test",
             extracted_values=all_extracted,
             table_values=all_table_values,
             grid_data=grid_data,
+            translation_rules=get_translation_rules_dict(),
         )
         computed_values, rule_results = engine.evaluate_all(request.rules, request.computed_fields)
 
