@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
-import { uploadPdf } from "@/api/client";
+import { uploadPdf, uploadSpreadsheet } from "@/api/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Trash2, Upload, FileText, Loader2, ChevronRight, ArrowLeft, Check } from "lucide-react";
+import { Trash2, Upload, FileText, Loader2, ChevronRight, ArrowLeft, Check, Sheet } from "lucide-react";
 import { WizardFileTab } from "./WizardFileTab";
+import { SpreadsheetViewer } from "@/components/SpreadsheetViewer";
 import type { ControleFile } from "@/types";
 
 interface WizardBestandenTabProps {
@@ -34,27 +35,62 @@ export function WizardBestandenTab({
 
   const handleFiles = useCallback(
     async (fileList: File[]) => {
-      const pdfFiles = fileList.filter((f) => f.type === "application/pdf");
-      if (pdfFiles.length === 0) {
-        setError("Alleen PDF-bestanden zijn toegestaan.");
+      const validFiles = fileList.filter(
+        (f) => f.type === "application/pdf" ||
+               f.name.toLowerCase().endsWith(".xlsx") ||
+               f.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      if (validFiles.length === 0) {
+        setError("Alleen PDF- of Excel-bestanden (.xlsx) zijn toegestaan.");
         return;
       }
       setError(null);
       setIsUploading(true);
       try {
-        for (const file of pdfFiles) {
-          const { pdf_id, page_count } = await uploadPdf(file);
-          const baseName = file.name.replace(/\.pdf$/i, "");
-          const newFile: ControleFile = {
-            id: crypto.randomUUID(),
-            label: baseName,
-            pdfId: pdf_id,
-            pdfFilename: file.name,
-            pageCount: page_count,
-            fields: [],
-            extractionResults: null,
-          };
-          onAddFile(newFile);
+        for (const file of validFiles) {
+          const isSpreadsheet = file.name.toLowerCase().endsWith(".xlsx") ||
+            file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+          if (isSpreadsheet) {
+            const res = await uploadSpreadsheet(file);
+            const baseName = file.name.replace(/\.xlsx$/i, "");
+            const newFile: ControleFile = {
+              id: crypto.randomUUID(),
+              label: baseName,
+              fileType: "spreadsheet",
+              pdfId: null,
+              pdfFilename: null,
+              pageCount: 0,
+              spreadsheetId: res.spreadsheet_id,
+              spreadsheetFilename: file.name,
+              sheetData: {
+                headers: res.headers,
+                rows: res.rows,
+                rowCount: res.row_count,
+                colCount: res.col_count,
+              },
+              fields: [],
+              extractionResults: null,
+            };
+            onAddFile(newFile);
+          } else {
+            const { pdf_id, page_count } = await uploadPdf(file);
+            const baseName = file.name.replace(/\.pdf$/i, "");
+            const newFile: ControleFile = {
+              id: crypto.randomUUID(),
+              label: baseName,
+              fileType: "pdf",
+              pdfId: pdf_id,
+              pdfFilename: file.name,
+              pageCount: page_count,
+              spreadsheetId: null,
+              spreadsheetFilename: null,
+              sheetData: null,
+              fields: [],
+              extractionResults: null,
+            };
+            onAddFile(newFile);
+          }
         }
       } catch (err: unknown) {
         const message =
@@ -79,9 +115,9 @@ export function WizardBestandenTab({
   // If viewing a file, show the template builder with a back bar
   if (activeFileId) {
     const activeFile = files.find((f) => f.id === activeFileId);
+    const isSpreadsheet = activeFile?.fileType === "spreadsheet";
     return (
       <div className="flex flex-col h-full">
-        {/* Back bar */}
         <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 flex-shrink-0">
           <Button variant="ghost" size="sm" onClick={onCloseFile} className="gap-1.5">
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -95,15 +131,27 @@ export function WizardBestandenTab({
           </span>
         </div>
         <div className="flex-1 min-h-0">
-          <WizardFileTab key={activeFileId} fileId={activeFileId} />
+          {isSpreadsheet ? (
+            <SpreadsheetViewer key={activeFileId} fileId={activeFileId} />
+          ) : (
+            <WizardFileTab key={activeFileId} fileId={activeFileId} />
+          )}
         </div>
       </div>
     );
   }
 
   // File list view
-  const allHaveResults = files.every((f) => f.extractionResults !== null && f.extractionResults.length > 0);
-  const canProceed = files.length > 0 && files.every((f) => f.pdfId !== null && f.label.trim().length > 0) && allHaveResults;
+  const allHaveResults = files.every((f) => {
+    if (f.fileType === "spreadsheet") return true;
+    return f.extractionResults !== null && f.extractionResults.length > 0;
+  });
+  const canProceed = files.length > 0 && files.every((f) => {
+    if (f.fileType === "spreadsheet") {
+      return f.spreadsheetId !== null && f.label.trim().length > 0;
+    }
+    return f.pdfId !== null && f.label.trim().length > 0;
+  }) && allHaveResults;
 
   const dropzone = (
     <div
@@ -130,16 +178,16 @@ export function WizardBestandenTab({
         <>
           <Upload className={`text-muted-foreground mb-2 ${files.length > 0 ? "h-6 w-6" : "h-8 w-8"}`} />
           <p className="text-foreground font-medium text-sm text-center">
-            {files.length > 0 ? "Meer uploaden" : "Sleep PDF-bestanden hierheen of klik om te uploaden"}
+            {files.length > 0 ? "Meer uploaden" : "Sleep bestanden hierheen of klik om te uploaden"}
           </p>
-          <p className="text-muted-foreground text-xs mt-1">Alleen PDF-bestanden</p>
+          <p className="text-muted-foreground text-xs mt-1">PDF of Excel (.xlsx)</p>
         </>
       )}
       {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
       <input
         id="wizard-pdf-input"
         type="file"
-        accept="application/pdf"
+        accept="application/pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         multiple
         className="hidden"
         onChange={(e) => handleFiles(Array.from(e.target.files ?? []))}
@@ -175,7 +223,11 @@ export function WizardBestandenTab({
                 <div className="flex-1 p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <FileText className="h-5 w-5 text-primary" />
+                      {file.fileType === "spreadsheet" ? (
+                        <Sheet className="h-5 w-5 text-primary" />
+                      ) : (
+                        <FileText className="h-5 w-5 text-primary" />
+                      )}
                     </div>
                     <Button
                       variant="ghost"
@@ -195,7 +247,7 @@ export function WizardBestandenTab({
                       onClick={(e) => e.stopPropagation()}
                     />
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                      {file.pdfFilename}
+                      {file.fileType === "spreadsheet" ? file.spreadsheetFilename : file.pdfFilename}
                     </p>
                   </div>
                 </div>
