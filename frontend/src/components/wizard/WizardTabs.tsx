@@ -23,14 +23,17 @@ interface TabDef {
 
 export function WizardTabs({ activeTab, controleName, files, onTabChange, isViewingFile }: WizardTabsProps) {
   const allFilesHaveFields = files.length > 0 && files.every((f) => f.fields.length > 0);
-  const allFilesHaveResults = files.length > 0 && files.every((f) => f.extractionResults !== null && f.extractionResults.length > 0);
+  const allFilesHaveResults = files.length > 0 && files.every((f) => {
+    if (f.fileType === "spreadsheet") return true;
+    return f.extractionResults !== null && f.extractionResults.length > 0;
+  });
   const regelsDisabled = files.length === 0 || !allFilesHaveResults;
 
   let regelsDisabledReason = "";
   if (files.length === 0) {
     regelsDisabledReason = "Upload minstens één bestand om regels te kunnen instellen";
   } else if (!allFilesHaveResults) {
-    const pending = files.filter((f) => !f.extractionResults || f.extractionResults.length === 0);
+    const pending = files.filter((f) => f.fileType !== "spreadsheet" && (!f.extractionResults || f.extractionResults.length === 0));
     regelsDisabledReason = `Voer eerst een preview-extractie uit voor: ${pending.map((f) => f.label || "Naamloos").join(", ")}`;
   }
 

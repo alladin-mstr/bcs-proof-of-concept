@@ -12,7 +12,10 @@ import { Save, Rocket, Loader2 } from "lucide-react";
 import type { WizardTab, ControleFile } from "@/types";
 
 function canAccessRegels(files: ControleFile[]): boolean {
-  return files.length > 0 && files.every((f) => f.extractionResults !== null && f.extractionResults.length > 0);
+  return files.length > 0 && files.every((f) => {
+    if (f.fileType === "spreadsheet") return true;
+    return f.extractionResults !== null && f.extractionResults.length > 0;
+  });
 }
 
 export default function ControleWizard() {
