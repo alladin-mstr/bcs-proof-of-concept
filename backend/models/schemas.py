@@ -70,7 +70,7 @@ class CellRange(BaseModel):
 
 class RuleOperand(BaseModel):
     """An operand in a rule expression."""
-    type: Literal["field_ref", "literal", "computed_ref", "column_ref", "formula", "range_ref"]
+    type: Literal["field_ref", "literal", "computed_ref", "column_ref", "formula", "range_ref", "global_value"]
     ref: FieldRef | None = None             # when type = "field_ref" or "column_ref"
     value: str | None = None                # when type = "literal"
     datatype: DataType | None = None        # when type = "literal"
@@ -81,6 +81,9 @@ class RuleOperand(BaseModel):
     spreadsheet_id: str | None = None       # when type = "formula" or "range_ref"
     # Cell range
     range: CellRange | None = None          # when type = "range_ref"
+    # Global value reference
+    global_group_id: str | None = None       # when type = "global_value"
+    global_value_id: str | None = None       # when type = "global_value"
 
 
 class Condition(BaseModel):
@@ -519,3 +522,29 @@ class ControleSeriesRun(BaseModel):
     status: Literal["running", "completed", "stopped"]
     stepResults: list[ControleSeriesStepResult] = []
     runAt: datetime
+
+
+# --- Global Values ---
+
+class GlobalValue(BaseModel):
+    """A single named value within a global value group."""
+    id: str
+    name: str
+    dataType: Literal["text", "number", "date", "boolean"]
+    value: str = ""
+
+
+class GlobalValueGroupCreate(BaseModel):
+    """Request body to create or update a global value group."""
+    name: str
+    values: list[GlobalValue] = []
+
+
+class GlobalValueGroup(BaseModel):
+    """A persisted global value group with auto-incrementing version."""
+    id: str
+    name: str
+    version: int = 1
+    values: list[GlobalValue] = []
+    createdAt: str
+    updatedAt: str
