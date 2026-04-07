@@ -18,6 +18,10 @@ import Settings from "./pages/Settings";
 import Results from "./pages/Results";
 import RuleLibrary from "./pages/RuleLibrary";
 import MyControls from "./pages/MyControls";
+import SeriesBuilder from "./pages/SeriesBuilder";
+import SeriesDetail from "./pages/SeriesDetail";
+import RunSeries from "./pages/RunSeries";
+import SeriesList from "./pages/SeriesList";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -48,6 +52,11 @@ const App = () => (
                 <Route path="/controle/:id/edit" element={<ProtectedPage><ControleWizard /></ProtectedPage>} />
                 <Route path="/controle/:id/run" element={<ProtectedPage><RunControle /></ProtectedPage>} />
                 <Route path="/controles" element={<ProtectedPage><MyControls /></ProtectedPage>} />
+                <Route path="/controle-series" element={<ProtectedPage><SeriesList /></ProtectedPage>} />
+                <Route path="/controle-series/nieuw" element={<ProtectedPage><SeriesBuilder /></ProtectedPage>} />
+                <Route path="/controle-series/:id" element={<ProtectedPage><SeriesDetail /></ProtectedPage>} />
+                <Route path="/controle-series/:id/edit" element={<ProtectedPage><SeriesBuilder /></ProtectedPage>} />
+                <Route path="/controle-series/:id/run" element={<ProtectedPage><RunSeries /></ProtectedPage>} />
                 <Route path="/regels" element={<ProtectedPage><RuleLibrary /></ProtectedPage>} />
                 <Route path="/instellingen" element={<ProtectedPage><Settings /></ProtectedPage>} />
                 <Route path="/resultaten/:taskId" element={<ProtectedPage><Results /></ProtectedPage>} />

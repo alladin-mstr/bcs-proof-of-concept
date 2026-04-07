@@ -1,4 +1,4 @@
-import { Home, Users, Settings, ChevronDown, ClipboardCheck, LogOut, BookOpen, ListChecks, MoreVertical, Sun, Moon, Monitor } from "lucide-react";
+import { Home, Users, Settings, ChevronDown, ClipboardCheck, LogOut, BookOpen, ListChecks, Layers, MoreVertical, Sun, Moon, Monitor } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useTaskContext } from "@/context/TaskContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -112,6 +112,18 @@ export function AppSidebar() {
                   >
                     <ListChecks className="h-5 w-5" />
                     <span>Mijn controles</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/controle-series"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                  >
+                    <Layers className="h-5 w-5" />
+                    <span>Series</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
