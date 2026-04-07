@@ -371,107 +371,69 @@ export const sampleControlRuns: ControlRun[] = [
   },
 ];
 
-// Vertaalregels voor de Regelbibliotheek
+// Vertaalregels voor de Regelbibliotheek — 42 regels: 28 Polaris, 8 Delta, 6 HR Essentials
 export const translationRules: TranslationRule[] = [
-  {
-    id: 'rule-1',
-    code: 'P0003',
-    rapport: 'Verwerkingssignalen',
-    teamId: 'polaris',
-    teamName: 'Polaris',
-    translation: 'Ingangsdatum functie ligt voor aanvang dienstverband. Graag corrigeren naar de juiste datum of bevestigen dat dit correct is.',
-    lastModified: new Date('2026-02-03'),
-  },
-  {
-    id: 'rule-2',
-    code: 'P0012',
-    rapport: 'Verwerkingssignalen',
-    teamId: 'polaris',
-    teamName: 'Polaris',
-    translation: 'Adresgegevens ontbreken. Graag het woonadres invoeren — dit is verplicht voor de loonaangifte.',
-    lastModified: new Date('2026-02-03'),
-  },
-  {
-    id: 'rule-3',
-    code: 'P0047',
-    rapport: 'Verwerkingssignalen',
-    teamId: 'polaris',
-    teamName: 'Polaris',
-    translation: 'Geboortedatum is niet ingevuld. Dit is een verplicht veld voor de Belastingdienst. Graag aanvullen.',
-    lastModified: new Date('2026-02-03'),
-  },
-  {
-    id: 'rule-4',
-    code: 'P0089',
-    rapport: 'Verwerkingssignalen',
-    teamId: 'polaris',
-    teamName: 'Polaris',
-    translation: 'Parttime percentage is gewijzigd maar contracturen zijn niet aangepast. Graag de contracturen bijwerken naar het nieuwe percentage, of bevestigen dat het huidige rooster klopt.',
-    lastModified: new Date('2026-02-03'),
-  },
-  {
-    id: 'rule-5',
-    code: 'BSN ontbreekt',
-    rapport: 'Loonaangifte',
-    teamId: 'polaris',
-    teamName: 'Polaris',
-    translation: 'BSN ontbreekt. Verplicht voor loonaangifte Belastingdienst. Graag aanvullen.',
-    lastModified: new Date('2026-02-05'),
-  },
-  {
-    id: 'rule-6',
-    code: 'Saldo ≠ 0 + UitDienst',
-    rapport: 'Reserveringen',
-    teamId: 'polaris',
-    teamName: 'Polaris',
-    translation: 'Medewerker is uit dienst per {DatumUitDienst} maar heeft nog een openstaand saldo van {Saldo} voor {Reservering}. Graag uitbetalen of bevestigen dat verrekening loopt.',
-    lastModified: new Date('2026-02-05'),
-  },
-  {
-    id: 'rule-7',
-    code: 'Kasbetaling',
-    rapport: 'Betalingen',
-    teamId: 'polaris',
-    teamName: 'Polaris',
-    translation: 'Kasbetaling gedetecteerd. Graag bevestigen dat dit correct en gewenst is.',
-    lastModified: new Date('2026-02-05'),
-  },
-  {
-    id: 'rule-8',
-    code: 'Rooster ≠ Contract',
-    rapport: 'In-dienst',
-    teamId: 'polaris',
-    teamName: 'Polaris',
-    translation: 'Rooster ({rooster}u) wijkt af van contract ({contract}u). Graag aanpassen.',
-    lastModified: new Date('2026-02-08'),
-  },
-  {
-    id: 'rule-9',
-    code: 'Risicopremie ≠ match',
-    rapport: 'Implementatie',
-    teamId: 'delta',
-    teamName: 'Delta',
-    translation: 'Risicopremie wijkt af: plan {plan}%, systeem {systeem}%. Graag controleren en corrigeren.',
-    lastModified: new Date('2026-02-08'),
-  },
-  {
-    id: 'rule-10',
-    code: 'Franchise ≠ match',
-    rapport: 'Implementatie',
-    teamId: 'delta',
-    teamName: 'Delta',
-    translation: 'Franchise wijkt af: plan €{plan}, systeem €{systeem}. Graag controleren.',
-    lastModified: new Date('2026-02-08'),
-  },
-  {
-    id: 'rule-11',
-    code: 'Pensioenbijdrage verschil > €1',
-    rapport: 'Pensioencheck',
-    teamId: 'hr-essentials',
-    teamName: 'HR Ess.',
-    translation: 'Pensioenbijdrage wijkt af: verwacht €{verwacht}, loonstrook €{werkelijk}. Mogelijke oorzaak: parttimefactor of franchise niet correct toegepast.',
-    lastModified: new Date('2026-02-10'),
-  },
+  // === Polaris — Verwerkingssignalen (12) ===
+  { id: 'rule-1', code: 'P0003', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Ingangsdatum functie ligt voor aanvang dienstverband. Graag corrigeren naar de juiste datum of bevestigen dat dit correct is.', lastModified: new Date('2026-02-03') },
+  { id: 'rule-2', code: 'P0012', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Adresgegevens ontbreken. Graag het woonadres invoeren — dit is verplicht voor de loonaangifte.', lastModified: new Date('2026-02-03') },
+  { id: 'rule-3', code: 'P0047', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Geboortedatum is niet ingevuld. Dit is een verplicht veld voor de Belastingdienst. Graag aanvullen.', lastModified: new Date('2026-02-03') },
+  { id: 'rule-4', code: 'P0089', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Parttime percentage is gewijzigd maar contracturen zijn niet aangepast. Graag de contracturen bijwerken naar het nieuwe percentage, of bevestigen dat het huidige rooster klopt.', lastModified: new Date('2026-02-03') },
+  { id: 'rule-5', code: 'P0102', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Loonheffingskorting is bij meerdere werkgevers actief. Graag controleren of dit correct is.', lastModified: new Date('2026-02-03') },
+  { id: 'rule-6', code: 'P0118', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Bankrekeningnummer is gewijzigd. Graag bevestigen dat de wijziging geautoriseerd is.', lastModified: new Date('2026-02-03') },
+  { id: 'rule-7', code: 'P0134', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Inhoudingsbedrag overschrijdt nettoloon. Controleer of alle inhoudingen correct zijn en of de medewerker akkoord is.', lastModified: new Date('2026-02-05') },
+  { id: 'rule-8', code: 'P0156', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Bruto-netto traject bevat negatieve netto. Controleer of dit door nabetaling of correctie komt.', lastModified: new Date('2026-02-05') },
+  { id: 'rule-9', code: 'P0201', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Wachtgeldregeling actief zonder einddatum. Graag einddatum invullen of bevestigen dat dit correct is.', lastModified: new Date('2026-02-05') },
+  { id: 'rule-10', code: 'P0215', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Looncomponent zonder grondslag gekoppeld. Graag de grondslag controleren en aanvullen.', lastModified: new Date('2026-02-05') },
+  { id: 'rule-11', code: 'P0278', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Eindejaarsuitkering wijkt af van CAO-tabel. Graag het percentage controleren.', lastModified: new Date('2026-02-08') },
+  { id: 'rule-12', code: 'P0312', rapport: 'Verwerkingssignalen', teamId: 'polaris', teamName: 'Polaris', translation: 'Verlofregistratie is niet bijgewerkt na contractwijziging. Graag het verlofsaldo herberekenen.', lastModified: new Date('2026-02-08') },
+
+  // === Polaris — Loonaangifte (4) ===
+  { id: 'rule-13', code: 'BSN ontbreekt', rapport: 'Loonaangifte', teamId: 'polaris', teamName: 'Polaris', translation: 'BSN ontbreekt. Verplicht voor loonaangifte Belastingdienst. Graag aanvullen.', lastModified: new Date('2026-02-05') },
+  { id: 'rule-14', code: 'Anoniementarief actief', rapport: 'Loonaangifte', teamId: 'polaris', teamName: 'Polaris', translation: 'Anoniementarief (52%) wordt toegepast. Controleer of identiteitsbewijs en BSN correct zijn geregistreerd.', lastModified: new Date('2026-02-05') },
+  { id: 'rule-15', code: 'SV-loon negatief', rapport: 'Loonaangifte', teamId: 'polaris', teamName: 'Polaris', translation: 'SV-loon is negatief in deze periode. Controleer of dit door een correctie komt en of de aangifte juist is.', lastModified: new Date('2026-02-08') },
+  { id: 'rule-16', code: 'Tabel bijz. beloning', rapport: 'Loonaangifte', teamId: 'polaris', teamName: 'Polaris', translation: 'Tabel bijzondere beloningen is toegepast. Graag controleren of dit correct is voor deze uitbetaling.', lastModified: new Date('2026-02-08') },
+
+  // === Polaris — Reserveringen (2) ===
+  { id: 'rule-17', code: 'Saldo ≠ 0 + UitDienst', rapport: 'Reserveringen', teamId: 'polaris', teamName: 'Polaris', translation: 'Medewerker is uit dienst per {DatumUitDienst} maar heeft nog een openstaand saldo van {Saldo} voor {Reservering}. Graag uitbetalen of bevestigen dat verrekening loopt.', lastModified: new Date('2026-02-05') },
+  { id: 'rule-18', code: 'Reservering < 0', rapport: 'Reserveringen', teamId: 'polaris', teamName: 'Polaris', translation: 'Reserveringssaldo is negatief ({Saldo}). Controleer of dit door een nabetaling of correctie komt.', lastModified: new Date('2026-02-08') },
+
+  // === Polaris — Betalingen (2) ===
+  { id: 'rule-19', code: 'Kasbetaling', rapport: 'Betalingen', teamId: 'polaris', teamName: 'Polaris', translation: 'Kasbetaling gedetecteerd. Graag bevestigen dat dit correct en gewenst is.', lastModified: new Date('2026-02-05') },
+  { id: 'rule-20', code: 'Dubbele betaling', rapport: 'Betalingen', teamId: 'polaris', teamName: 'Polaris', translation: 'Dubbele betaling gedetecteerd voor zelfde bedrag en periode. Graag controleren of dit bewust is.', lastModified: new Date('2026-02-10') },
+
+  // === Polaris — In-dienst (4) ===
+  { id: 'rule-21', code: 'Rooster ≠ Contract', rapport: 'In-dienst', teamId: 'polaris', teamName: 'Polaris', translation: 'Rooster ({rooster}u) wijkt af van contract ({contract}u). Graag aanpassen.', lastModified: new Date('2026-02-08') },
+  { id: 'rule-22', code: 'Adrestype afwijking', rapport: 'In-dienst', teamId: 'polaris', teamName: 'Polaris', translation: 'Correspondentieadres wijkt af van woonadres. Graag controleren welk adres correct is.', lastModified: new Date('2026-02-08') },
+  { id: 'rule-23', code: 'VG reservering ontbreekt', rapport: 'In-dienst', teamId: 'polaris', teamName: 'Polaris', translation: 'Vakantiegeldreservering is niet ingesteld. Dit is verplicht. Graag instellen.', lastModified: new Date('2026-02-08') },
+  { id: 'rule-24', code: 'Proeftijd > 2 maanden', rapport: 'In-dienst', teamId: 'polaris', teamName: 'Polaris', translation: 'Proeftijd is langer dan 2 maanden ingesteld. Dit is niet toegestaan bij een contract voor bepaalde tijd. Graag aanpassen.', lastModified: new Date('2026-02-10') },
+
+  // === Polaris — Uit-dienst (2) ===
+  { id: 'rule-25', code: 'Openstaande VD', rapport: 'Uit-dienst', teamId: 'polaris', teamName: 'Polaris', translation: 'Medewerker heeft nog {aantal} openstaande vakantiedagen. Graag uitbetalen of bevestigen.', lastModified: new Date('2026-02-10') },
+  { id: 'rule-26', code: 'Einddatum ontbreekt', rapport: 'Uit-dienst', teamId: 'polaris', teamName: 'Polaris', translation: 'Uit-dienst is gemeld maar einddatum ontbreekt in het systeem. Graag invullen.', lastModified: new Date('2026-02-10') },
+
+  // === Polaris — TWK (2) ===
+  { id: 'rule-27', code: 'TWK salaris', rapport: 'TWK', teamId: 'polaris', teamName: 'Polaris', translation: 'Salaris is met terugwerkende kracht gewijzigd. Graag bevestigen dat nabetaling correct is verwerkt.', lastModified: new Date('2026-02-10') },
+  { id: 'rule-28', code: 'TWK parttime%', rapport: 'TWK', teamId: 'polaris', teamName: 'Polaris', translation: 'Parttime percentage is met terugwerkende kracht gewijzigd. Graag bevestigen dat herberekening correct is.', lastModified: new Date('2026-02-10') },
+
+  // === Delta — Implementatie (8) ===
+  { id: 'rule-29', code: 'Risicopremie ≠ match', rapport: 'Implementatie', teamId: 'delta', teamName: 'Delta', translation: 'Risicopremie wijkt af: plan {plan}%, systeem {systeem}%. Graag controleren en corrigeren.', lastModified: new Date('2026-02-08') },
+  { id: 'rule-30', code: 'Franchise ≠ match', rapport: 'Implementatie', teamId: 'delta', teamName: 'Delta', translation: 'Franchise wijkt af: plan €{plan}, systeem €{systeem}. Graag controleren.', lastModified: new Date('2026-02-08') },
+  { id: 'rule-31', code: 'CAO ≠ match', rapport: 'Implementatie', teamId: 'delta', teamName: 'Delta', translation: 'CAO-code in het systeem ({systeem}) komt niet overeen met de afgesproken CAO ({plan}). Graag corrigeren.', lastModified: new Date('2026-02-08') },
+  { id: 'rule-32', code: 'Loontijdvak ≠ match', rapport: 'Implementatie', teamId: 'delta', teamName: 'Delta', translation: 'Loontijdvak wijkt af: plan {plan}, systeem {systeem}. Graag controleren en aanpassen.', lastModified: new Date('2026-02-10') },
+  { id: 'rule-33', code: 'Sector ≠ match', rapport: 'Implementatie', teamId: 'delta', teamName: 'Delta', translation: 'Sectorcode wijkt af: plan {plan}, systeem {systeem}. Dit heeft gevolgen voor de premies. Graag corrigeren.', lastModified: new Date('2026-02-10') },
+  { id: 'rule-34', code: 'WKR niet ingesteld', rapport: 'Implementatie', teamId: 'delta', teamName: 'Delta', translation: 'Eindheffing WKR is niet ingesteld in het systeem. Graag de werkkostenregeling configureren.', lastModified: new Date('2026-02-10') },
+  { id: 'rule-35', code: 'Pensioenfonds ≠ match', rapport: 'Implementatie', teamId: 'delta', teamName: 'Delta', translation: 'Pensioenfonds wijkt af: plan {plan}, systeem {systeem}. Graag controleren.', lastModified: new Date('2026-02-12') },
+  { id: 'rule-36', code: 'Werkgeversbijdrage ≠ match', rapport: 'Implementatie', teamId: 'delta', teamName: 'Delta', translation: 'Verdeling werkgeversbijdrage klopt niet: plan {plan}, systeem {systeem}. Graag corrigeren.', lastModified: new Date('2026-02-12') },
+
+  // === HR Essentials — Pensioencheck (4) ===
+  { id: 'rule-37', code: 'Pensioenbijdrage verschil > €1', rapport: 'Pensioencheck', teamId: 'hr-essentials', teamName: 'HR Ess.', translation: 'Pensioenbijdrage wijkt af: verwacht €{verwacht}, loonstrook €{werkelijk}. Mogelijke oorzaak: parttimefactor of franchise niet correct toegepast.', lastModified: new Date('2026-02-10') },
+  { id: 'rule-38', code: 'Max pensioengrondslag', rapport: 'Pensioencheck', teamId: 'hr-essentials', teamName: 'HR Ess.', translation: 'Pensioengrondslag overschrijdt het fiscaal maximum van €{max}. Graag controleren of aftoppingsregeling correct is toegepast.', lastModified: new Date('2026-02-10') },
+  { id: 'rule-39', code: 'PT-factor franchise', rapport: 'Pensioencheck', teamId: 'hr-essentials', teamName: 'HR Ess.', translation: 'Parttimefactor is niet toegepast op de franchise. Herbereken de pensioenbijdrage op basis van pro-rata franchise.', lastModified: new Date('2026-02-12') },
+  { id: 'rule-40', code: 'Pensioen bij 0-uren', rapport: 'Pensioencheck', teamId: 'hr-essentials', teamName: 'HR Ess.', translation: 'Pensioenbijdrage is berekend terwijl medewerker 0 uren heeft gewerkt. Graag controleren of dit correct is.', lastModified: new Date('2026-02-12') },
+
+  // === HR Essentials — Verlofcontrole (2) ===
+  { id: 'rule-41', code: 'Wettelijk verlof > max', rapport: 'Verlofcontrole', teamId: 'hr-essentials', teamName: 'HR Ess.', translation: 'Wettelijk verlof overschrijdt het maximum op basis van contracturen. Graag het verlofsaldo controleren.', lastModified: new Date('2026-02-12') },
+  { id: 'rule-42', code: 'Verlof niet opgebouwd', rapport: 'Verlofcontrole', teamId: 'hr-essentials', teamName: 'HR Ess.', translation: 'Verlofopbouw staat op 0 terwijl medewerker actief in dienst is. Graag de verlofregeling controleren.', lastModified: new Date('2026-02-12') },
 ];
 
 // Demo resultaten voor specifieke controles
