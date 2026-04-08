@@ -1,4 +1,4 @@
-import { Home, Users, Settings, ChevronDown, ClipboardCheck, LogOut, BookOpen, ListChecks, Layers, MoreVertical, Sun, Moon, Monitor } from "lucide-react";
+import { Home, Users, Settings, ChevronDown, ClipboardCheck, LogOut, BookOpen, ListChecks, Layers, MoreVertical, Sun, Moon, Monitor, BarChart3, Globe } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useTaskContext } from "@/context/TaskContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -107,11 +107,36 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/controles"
+                    end
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
                     activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
                   >
                     <ListChecks className="h-5 w-5" />
-                    <span>Mijn controles</span>
+                    <span>Controles</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/controles/resultaten"
+                    className="flex items-center gap-3 px-3 py-2.5 pl-11 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    <span>Resultaten</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/controles/globale-waarden"
+                    className="flex items-center gap-3 px-3 py-2.5 pl-11 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                  >
+                    <Globe className="h-4 w-4" />
+                    <span>Globale waarden</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>

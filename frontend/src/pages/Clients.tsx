@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, FileText, ChevronRight, Layers, CheckCircle, AlertTriangle } from "lucide-react";
+import { Plus, FileText, ChevronRight, Layers, CheckCircle, AlertTriangle, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,11 +24,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   listKlanten,
   createKlant,
   deleteKlant as deleteKlantApi,
   listControles,
+  createControle,
   listControleRuns,
   listControleSeries,
   unlinkControl,
@@ -57,6 +59,8 @@ export default function Clients() {
   const [newMedewerkerCount, setNewMedewerkerCount] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [klantToDelete, setKlantToDelete] = useState<Klant | null>(null);
+  const [addControlOpen, setAddControlOpen] = useState(false);
+  const [controlSearch, setControlSearch] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -165,6 +169,44 @@ export default function Clients() {
     }
   };
 
+  // Controls available to add (from other clients, not already on this client)
+  const availableControles = useMemo(() => {
+    if (!selectedId) return [];
+    const currentNames = new Set(controles.map(c => c.name));
+    return allControles.filter(c => c.klantId !== selectedId && !currentNames.has(c.name));
+  }, [allControles, controles, selectedId]);
+
+  const filteredAvailableControles = useMemo(() => {
+    if (!controlSearch.trim()) return availableControles;
+    const q = controlSearch.toLowerCase();
+    return availableControles.filter(
+      c => c.name.toLowerCase().includes(q) || (c.klantName || "").toLowerCase().includes(q)
+    );
+  }, [availableControles, controlSearch]);
+
+  const handleAddExistingControl = async (source: Controle) => {
+    if (!selected) return;
+    try {
+      await createControle({
+        name: source.name,
+        status: source.status,
+        files: source.files,
+        rules: source.rules,
+        computedFields: source.computedFields,
+        ruleGraph: source.ruleGraph,
+        klantId: selected.id,
+        klantName: selected.name,
+      });
+      const updatedControles = await listControles();
+      setAllControles(updatedControles);
+      setAddControlOpen(false);
+      setControlSearch("");
+      toast({ title: `Controle "${source.name}" toegevoegd` });
+    } catch {
+      toast({ title: "Toevoegen mislukt", variant: "destructive" });
+    }
+  };
+
   const openAddDialog = (parentId: string | null) => {
     setDialogParentId(parentId);
     setNewClientName("");
@@ -252,7 +294,7 @@ export default function Clients() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => navigate(`/controles?newForKlant=${selected.id}`)}
+                  onClick={() => { setControlSearch(""); setAddControlOpen(true); }}
                 >
                   <Plus className="mr-1 h-4 w-4" />
                   Nieuwe controle
@@ -504,6 +546,62 @@ export default function Clients() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuleren</Button>
             <Button onClick={handleAddClient} disabled={!newClientName.trim()}>Toevoegen</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add existing control dialog */}
+      <Dialog open={addControlOpen} onOpenChange={setAddControlOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Controle toevoegen aan {selected?.name}</DialogTitle>
+            <DialogDescription>
+              Selecteer een bestaande controle om toe te voegen.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Zoek op naam of klant..."
+              value={controlSearch}
+              onChange={(e) => setControlSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <ScrollArea className="max-h-80">
+            {filteredAvailableControles.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                {availableControles.length === 0 ? "Geen beschikbare controles" : "Geen resultaten"}
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {filteredAvailableControles.map((c) => {
+                  const totalFields = c.files.reduce((sum, f) => sum + f.fields.length, 0);
+                  return (
+                    <button
+                      key={c.id}
+                      className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors text-left border"
+                      onClick={() => handleAddExistingControl(c)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div>
+                          <span className="font-medium text-sm">{c.name}</span>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                            {c.klantName && <span>{c.klantName}</span>}
+                            <span>{c.files.length} bestanden</span>
+                            <span>{totalFields} velden</span>
+                          </div>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className={c.status === "published" ? "text-success border-success/30 bg-success/10" : "text-warning border-warning/30 bg-warning/10"}>
+                        {c.status === "published" ? "Gepubliceerd" : "Concept"}
+                      </Badge>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 

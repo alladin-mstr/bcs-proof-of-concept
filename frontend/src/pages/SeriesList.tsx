@@ -52,7 +52,7 @@ export default function SeriesList() {
     try {
       await deleteControleSeries(deleteTarget.id);
       setSeriesList((prev) => prev.filter((s) => s.id !== deleteTarget.id));
-      toast({ title: "Serie verwijderd" });
+      toast({ title: "Reeks verwijderd" });
     } catch {
       toast({ title: "Verwijderen mislukt", variant: "destructive" });
     } finally {
@@ -75,7 +75,7 @@ export default function SeriesList() {
       <HeaderAction>
         <Button onClick={() => navigate("/controle-series/nieuw")} className="rounded-full shadow-lg" size="sm">
           <Plus className="h-4 w-4 mr-1" />
-          Nieuwe serie
+          Nieuwe reeks
         </Button>
       </HeaderAction>
 
@@ -145,13 +145,13 @@ export default function SeriesList() {
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12">
                     <Layers className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-muted-foreground">Nog geen series aangemaakt</p>
+                    <p className="text-muted-foreground">Nog geen reeksen aangemaakt</p>
                     <Button
                       variant="link"
                       className="mt-2"
                       onClick={() => navigate("/controle-series/nieuw")}
                     >
-                      Maak je eerste serie
+                      Maak je eerste reeks
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -164,7 +164,7 @@ export default function SeriesList() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Serie verwijderen?</AlertDialogTitle>
+            <AlertDialogTitle>Reeks verwijderen?</AlertDialogTitle>
             <AlertDialogDescription>
               Weet je zeker dat je "{deleteTarget?.name}" wilt verwijderen?
             </AlertDialogDescription>

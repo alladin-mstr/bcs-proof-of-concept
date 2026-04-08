@@ -19,7 +19,7 @@ import '@xyflow/react/dist/style.css';
 import { useAppStore } from '@/store/appStore';
 import { nodeTypes } from './RuleNodes';
 import { serializeGraph } from './serializeGraph';
-import { listAllTemplateFields, listTestRuns, listControleRuns, updateTemplate as apiUpdateTemplate, listGlobalValueGroups, type TemplateFieldInfo } from '../../api/client';
+import { listAllTemplateFields, listTestRuns, listControleRuns, updateTemplate as apiUpdateTemplate, updateControle as apiUpdateControle, listGlobalValueGroups, type TemplateFieldInfo } from '../../api/client';
 import type { RuleNodeData, MathOperation, CompareOperator, AggregateOperation, RowFilterMode, DataType, TestRun, Field, GlobalValueGroup } from '../../types';
 import {
   Plus, Minus, X, Divide, Sigma, BarChart3, ArrowDownNarrowWide, ArrowUpNarrowWide,
@@ -99,7 +99,7 @@ const NODE_MENU_ITEMS: {
   { type: 'formula', label: 'Formula', category: 'Spreadsheet', icon: <Sigma className={ICN} />, defaults: { formulaExpression: '' } },
   { type: 'cell_range', label: 'Cell Range', category: 'Spreadsheet', icon: <BarChart3 className={ICN} />, defaults: { rangeExpression: '' } },
   // Signal
-  { type: 'polaris_lookup', label: 'Signal Lookup', category: 'Signal', icon: <Search className={ICN} /> },
+  { type: 'signal_lookup', label: 'Signal Lookup', category: 'Signal', icon: <Search className={ICN} /> },
 ];
 
 const CATEGORIES = ['Input', 'Math', 'Logic', 'Validate', 'Conditionals', 'Table', 'Spreadsheet', 'Signal'];
@@ -166,7 +166,7 @@ export default function RulesPanel() {
       return {
         id: `field-${f.id}`,
         type: 'field_input' as const,
-        position: { x: 0, y: i * 80 },
+        position: { x: (i % 3) * 250, y: Math.floor(i / 3) * 160 },
         data: {
           label: f.label,
           nodeType: 'field_input' as const,
@@ -241,7 +241,7 @@ export default function RulesPanel() {
         newNodes.push({
           id: nodeId,
           type: 'field_input' as const,
-          position: { x: 0, y: (existingFieldIds.size + newNodes.length) * 80 },
+          position: { x: ((existingFieldIds.size + newNodes.length) % 3) * 250, y: Math.floor((existingFieldIds.size + newNodes.length) / 3) * 160 },
           data: {
             label: header,
             nodeType: 'field_input' as const,
@@ -265,14 +265,36 @@ export default function RulesPanel() {
 
   const templateMode = useAppStore((s) => s.templateMode);
 
-  // Auto-save rule graph to the current template (debounced)
+  // Auto-save rule graph to the current template or wizard controle (debounced)
   const storeTemplateRules = useAppStore((s) => s.templateRules);
   const storeComputedFields = useAppStore((s) => s.computedFields);
+  const saveRulesToWizard = useAppStore((s) => s.saveRulesToWizard);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const changeCount = useRef(0);
   const lastTemplateId = useRef<string | null>(null);
 
   useEffect(() => {
+    // Wizard context: save rule graph to wizard state + backend
+    if (!activeTemplateId && wizardControle) {
+      changeCount.current++;
+      if (changeCount.current <= 1) return; // skip initial field-sync
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = setTimeout(() => {
+        saveRulesToWizard();
+        if (wizardControle.id) {
+          const state = useAppStore.getState();
+          apiUpdateControle(wizardControle.id, {
+            ...wizardControle,
+            rules: state.templateRules,
+            computedFields: state.computedFields,
+            ruleGraph: { nodes: state.ruleNodes, edges: state.ruleEdges },
+          }).catch(() => {});
+        }
+      }, 1000);
+      return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+    }
+
+    // Template context
     if (!activeTemplateId) { changeCount.current = 0; lastTemplateId.current = null; return; }
     // Reset counter when switching templates
     if (lastTemplateId.current !== activeTemplateId) {

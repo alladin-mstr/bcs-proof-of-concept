@@ -17,6 +17,8 @@ import Settings from "./pages/Settings";
 import Results from "./pages/Results";
 import RuleLibrary from "./pages/RuleLibrary";
 import MyControls from "./pages/MyControls";
+import MyControlResults from "./pages/MyControlResults";
+import MyControlGlobalValues from "./pages/MyControlGlobalValues";
 import GlobalValuePdfEditor from "./pages/GlobalValuePdfEditor";
 import SeriesBuilder from "./pages/SeriesBuilder";
 import SeriesDetail from "./pages/SeriesDetail";
@@ -53,6 +55,8 @@ const App = () => (
                 <Route path="/controle/:id/edit" element={<ProtectedPage><ControleWizard /></ProtectedPage>} />
                 <Route path="/controle/:id/run" element={<ProtectedPage><RunControle /></ProtectedPage>} />
                 <Route path="/controles" element={<ProtectedPage><MyControls /></ProtectedPage>} />
+                <Route path="/controles/resultaten" element={<ProtectedPage><MyControlResults /></ProtectedPage>} />
+                <Route path="/controles/globale-waarden" element={<ProtectedPage><MyControlGlobalValues /></ProtectedPage>} />
                 <Route path="/global-values/:id/edit" element={<ProtectedPage><GlobalValuePdfEditor /></ProtectedPage>} />
                 <Route path="/controle-series" element={<ProtectedPage><SeriesList /></ProtectedPage>} />
                 <Route path="/controle-series/nieuw" element={<ProtectedPage><SeriesBuilder /></ProtectedPage>} />

@@ -143,7 +143,7 @@ export default function SeriesBuilder() {
           <Label htmlFor="series-name">Naam</Label>
           <Input
             id="series-name"
-            placeholder="Bijv. Jaarrekening serie 2026"
+            placeholder="Bijv. Jaarrekening reeks 2026"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />

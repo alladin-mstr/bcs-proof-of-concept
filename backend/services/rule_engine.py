@@ -392,9 +392,9 @@ class RuleEngine:
                     return "true" if passing > 0 else "false"
             return None
 
-        # Handle polaris_lookup operation
-        if op == "polaris_lookup":
-            pc = comp.polaris_config
+        # Handle signal_lookup operation
+        if op == "signal_lookup":
+            pc = comp.signal_lookup_config
             if not pc or not pc.spreadsheet_id or pc.spreadsheet_id not in self.grid_data:
                 return None
             grid = self.grid_data[pc.spreadsheet_id]

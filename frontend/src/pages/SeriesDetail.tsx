@@ -180,14 +180,14 @@ export default function SeriesDetail() {
       <div className="flex justify-end">
         <Button variant="outline" className="text-destructive" onClick={() => setShowDelete(true)}>
           <Trash2 className="h-4 w-4 mr-2" />
-          Serie verwijderen
+          Reeks verwijderen
         </Button>
       </div>
 
       <AlertDialog open={showDelete} onOpenChange={setShowDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Serie verwijderen?</AlertDialogTitle>
+            <AlertDialogTitle>Reeks verwijderen?</AlertDialogTitle>
             <AlertDialogDescription>
               Weet je zeker dat je "{series.name}" wilt verwijderen?
             </AlertDialogDescription>
