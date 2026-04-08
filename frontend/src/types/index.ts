@@ -501,6 +501,20 @@ export interface GlobalValue {
   value: string;
 }
 
+export interface AuditEntry {
+  timestamp: string;
+  action: "created" | "pdf_uploaded" | "values_confirmed" | "pdf_template_updated";
+  details: {
+    filename?: string;
+    replacedFilename?: string;
+    previousValues?: GlobalValue[];
+    newValues?: GlobalValue[];
+    changedFields?: string[];
+    mode?: string;
+    fieldCount?: number;
+  };
+}
+
 export interface GlobalValueGroup {
   id: string;
   name: string;
@@ -508,4 +522,23 @@ export interface GlobalValueGroup {
   values: GlobalValue[];
   createdAt: string;
   updatedAt: string;
+  mode: "manual" | "pdf";
+  templateId: string | null;
+  auditLog: AuditEntry[];
+}
+
+export interface GlobalValuePdfTemplate {
+  id: string;
+  groupId: string;
+  pdfId: string;
+  filename: string;
+  fields: Field[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExtractionPreview {
+  extractedValues: GlobalValue[];
+  currentValues: GlobalValue[];
+  fieldResults: FieldResult[];
 }

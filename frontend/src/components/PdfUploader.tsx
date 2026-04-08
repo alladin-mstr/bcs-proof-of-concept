@@ -2,16 +2,27 @@ import { useState, useCallback } from 'react';
 import { uploadPdf } from '../api/client';
 import { useAppStore } from '../store/appStore';
 
-export default function PdfUploader() {
+interface PdfUploaderProps {
+  onUpload?: (file: File) => Promise<void> | void;
+  uploading?: boolean;
+}
+
+export default function PdfUploader({ onUpload, uploading: externalUploading }: PdfUploaderProps = {}) {
   const setPdf = useAppStore((s) => s.setPdf);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isLoading = isUploading || externalUploading;
+
   const handleFile = useCallback(
     async (file: File) => {
       if (file.type !== 'application/pdf') {
         setError('Please upload a PDF file.');
+        return;
+      }
+      if (onUpload) {
+        await onUpload(file);
         return;
       }
       setError(null);
@@ -27,7 +38,7 @@ export default function PdfUploader() {
         setIsUploading(false);
       }
     },
-    [setPdf]
+    [onUpload, setPdf]
   );
 
   const onDrop = useCallback(
@@ -85,7 +96,7 @@ export default function PdfUploader() {
             d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
           />
         </svg>
-        {isUploading ? (
+        {isLoading ? (
           <p className="text-foreground/70 font-medium">Uploading...</p>
         ) : (
           <>

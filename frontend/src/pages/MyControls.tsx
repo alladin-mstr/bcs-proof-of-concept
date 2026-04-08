@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, CheckCircle, AlertTriangle, Clock, ListChecks, Plus, Play, Pencil, FileText, MoreHorizontal, Eye, Trash2, Globe } from "lucide-react";
+import GlobalValueAuditLog from "@/components/GlobalValueAuditLog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +69,8 @@ export default function MyControls() {
   const [editingGroup, setEditingGroup] = useState<{ id: string | null; name: string; values: GlobalValue[] } | null>(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<GlobalValueGroup | null>(null);
   const [deletingGroup, setDeletingGroup] = useState(false);
+  const [newGroupMode, setNewGroupMode] = useState<"manual" | "pdf">("manual");
+  const [auditGroupId, setAuditGroupId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
@@ -121,12 +124,18 @@ export default function MyControls() {
       if (groupId) {
         const updated = await updateGlobalValueGroup(groupId, { name, values });
         setGlobalGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+        setEditingGroup(null);
+        toast({ title: "Groep bijgewerkt" });
       } else {
-        const created = await createGlobalValueGroup({ name, values });
+        const created = await createGlobalValueGroup({ name, values, mode: newGroupMode });
         setGlobalGroups((prev) => [created, ...prev]);
+        setEditingGroup(null);
+        toast({ title: "Groep aangemaakt" });
+        if (newGroupMode === "pdf") {
+          navigate(`/global-values/${created.id}/edit`);
+          return;
+        }
       }
-      setEditingGroup(null);
-      toast({ title: groupId ? "Groep bijgewerkt" : "Groep aangemaakt" });
     } catch {
       toast({ title: "Opslaan mislukt", variant: "destructive" });
     }
@@ -398,7 +407,10 @@ export default function MyControls() {
             <Button
               size="sm"
               className="rounded-full shadow-lg"
-              onClick={() => setEditingGroup({ id: null, name: "", values: [] })}
+              onClick={() => {
+                setEditingGroup({ id: null, name: "", values: [] });
+                setNewGroupMode("manual");
+              }}
             >
               <Plus className="h-4 w-4 mr-1" />
               Nieuwe groep
@@ -418,6 +430,15 @@ export default function MyControls() {
                     autoFocus
                   />
                 </div>
+                {editingGroup.id === null && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Type</label>
+                    <div className="flex gap-2">
+                      <button type="button" className={`px-4 py-2 rounded border text-sm ${newGroupMode === "manual" ? "bg-primary text-white border-primary" : "border-gray-300"}`} onClick={() => setNewGroupMode("manual")}>Handmatig</button>
+                      <button type="button" className={`px-4 py-2 rounded border text-sm ${newGroupMode === "pdf" ? "bg-primary text-white border-primary" : "border-gray-300"}`} onClick={() => setNewGroupMode("pdf")}>PDF</button>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Waarden</Label>
                   <div className="border rounded-md overflow-hidden">
@@ -562,14 +583,25 @@ export default function MyControls() {
                 </TableHeader>
                 <TableBody>
                   {filteredGroups.map((g) => (
-                    <TableRow key={g.id}>
-                      <TableCell className="font-medium">{g.name}</TableCell>
+                    <TableRow key={g.id} className="cursor-pointer" onClick={() => {
+                      if (g.mode === "pdf") {
+                        navigate(`/global-values/${g.id}/edit`);
+                        return;
+                      }
+                      setEditingGroup({ id: g.id, name: g.name, values: g.values });
+                    }}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {g.mode === "pdf" && <FileText className="h-4 w-4 text-primary" />}
+                          {g.name}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{g.values.length}</TableCell>
                       <TableCell>
                         <Badge variant="outline">v{g.version}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(g.updatedAt)}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -577,14 +609,25 @@ export default function MyControls() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setEditingGroup({ id: g.id, name: g.name, values: g.values })}>
-                              <Pencil className="h-4 w-4 mr-2" />
-                              Bewerken
-                            </DropdownMenuItem>
+                            {g.mode === "pdf" ? (
+                              <>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/global-values/${g.id}/edit`); }}>
+                                  Velden bewerken
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setAuditGroupId(g.id); }}>
+                                  Geschiedenis
+                                </DropdownMenuItem>
+                              </>
+                            ) : (
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingGroup({ id: g.id, name: g.name, values: g.values }); }}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Bewerken
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
-                              onClick={() => setDeleteGroupTarget(g)}
+                              onClick={(e) => { e.stopPropagation(); setDeleteGroupTarget(g); }}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Verwijderen
@@ -606,6 +649,8 @@ export default function MyControls() {
               </Table>
             </CardContent>
           </Card>
+
+          <GlobalValueAuditLog groupId={auditGroupId} onClose={() => setAuditGroupId(null)} />
 
           {/* Delete group confirmation */}
           <AlertDialog open={!!deleteGroupTarget} onOpenChange={(open) => !open && setDeleteGroupTarget(null)}>

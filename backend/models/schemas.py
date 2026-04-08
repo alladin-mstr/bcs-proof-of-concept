@@ -538,10 +538,18 @@ class GlobalValue(BaseModel):
     value: str = ""
 
 
+class AuditEntry(BaseModel):
+    """A single event in a global value group's audit trail."""
+    timestamp: str
+    action: Literal["created", "pdf_uploaded", "values_confirmed", "pdf_template_updated"]
+    details: dict = {}
+
+
 class GlobalValueGroupCreate(BaseModel):
     """Request body to create or update a global value group."""
     name: str
     values: list[GlobalValue] = []
+    mode: Literal["manual", "pdf"] = "manual"
 
 
 class GlobalValueGroup(BaseModel):
@@ -550,5 +558,19 @@ class GlobalValueGroup(BaseModel):
     name: str
     version: int = 1
     values: list[GlobalValue] = []
+    createdAt: str
+    updatedAt: str
+    mode: Literal["manual", "pdf"] = "manual"
+    templateId: str | None = None
+    auditLog: list[AuditEntry] = []
+
+
+class GlobalValuePdfTemplate(BaseModel):
+    """PDF template linked to a global value group."""
+    id: str
+    groupId: str
+    pdfId: str
+    filename: str
+    fields: list[Field] = []
     createdAt: str
     updatedAt: str
