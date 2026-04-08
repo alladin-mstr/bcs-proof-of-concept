@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Upload, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PdfViewer from "@/components/PdfViewer";
+import TemplatePanel from "@/components/TemplatePanel";
 import PdfUploader from "@/components/PdfUploader";
 import { useAppStore } from "@/store/appStore";
 import {
@@ -168,7 +169,10 @@ export default function GlobalValuePdfEditor() {
             </div>
           </div>
         ) : (
-          <PdfViewer />
+          <div className="flex flex-1 overflow-hidden h-full max-h-[80vh]">
+            <TemplatePanel embedded />
+            <PdfViewer />
+          </div>
         )}
       </div>
     </div>
