@@ -4,6 +4,13 @@ import pdfplumber
 from models.schemas import Region
 
 
+def _clean_utf16_text(text: str) -> str:
+    """Strip UTF-16 encoding artifacts (BOM markers, null bytes) from text."""
+    if '\x00' in text or '\ufffd' in text:
+        return text.replace('\ufffd', '').replace('\x00', '')
+    return text
+
+
 def _get_form_field_words(page, pw: float, ph: float) -> list[dict]:
     """Extract form field values as word-like dicts from PDF annotations.
 
@@ -20,7 +27,11 @@ def _get_form_field_words(page, pw: float, ph: float) -> list[dict]:
             continue
         v = data.get('V', '')
         if isinstance(v, bytes):
-            v = v.decode('utf-8', errors='replace')
+            # Try UTF-16 first (PDF form fields may use UTF-16 BE with BOM)
+            if v[:2] in (b'\xfe\xff', b'\xff\xfe'):
+                v = v.decode('utf-16', errors='replace')
+            else:
+                v = v.decode('utf-8', errors='replace')
         v = str(v).strip()
         # PDF checkbox/radio values come as PDF name objects like /'Off', /'Yes', /'1'
         if v.startswith("/'") and v.endswith("'"):
@@ -58,10 +69,10 @@ def _extract_form_field_text_in_bbox(page, abs_bbox: tuple, pw: float, ph: float
     x0, y0, x1, y1 = abs_bbox
     texts = []
     for w in _get_form_field_words(page, pw, ph):
-        # Check if the form field overlaps with the bounding box
-        wx0, wtop = float(w['x0']), float(w['top'])
-        wx1, wbottom = float(w['x1']), float(w['bottom'])
-        if wx1 > x0 and wx0 < x1 and wbottom > y0 and wtop < y1:
+        # Use midpoint check — widget Rects can overlap between fields
+        wmx = (float(w['x0']) + float(w['x1'])) / 2
+        wmy = (float(w['top']) + float(w['bottom'])) / 2
+        if wmx >= x0 and wmx <= x1 and wmy >= y0 and wmy <= y1:
             texts.append(w['text'])
     return " ".join(texts)
 
@@ -174,7 +185,7 @@ def _chars_to_text(chars: list[dict]) -> str:
             if gap > avg_width * 0.3:
                 parts.append(" ")
         parts.append(c.get('text', ''))
-    return "".join(parts)
+    return _clean_utf16_text("".join(parts))
 
 
 def resolve_extraction_region(
@@ -222,13 +233,23 @@ def resolve_extraction_region(
                 wy0 = float(w['top'])
                 wy1 = float(w['bottom'])
                 wmx = (wx0 + wx1) / 2
-                if wmx >= ax0 and wmx <= ax1 and wy1 > ay0 and wy0 < ay1:
-                    matched.append(w)
+                if w.get('_form_field'):
+                    # Form field words share the widget Rect which can be
+                    # imprecise / overlapping — require vertical midpoint
+                    # to fall inside the region.
+                    wmy = (wy0 + wy1) / 2
+                    if wmx >= ax0 and wmx <= ax1 and wmy >= ay0 and wmy <= ay1:
+                        matched.append(w)
+                else:
+                    if wmx >= ax0 and wmx <= ax1 and wy1 > ay0 and wy0 < ay1:
+                        matched.append(w)
             if not matched:
                 text = extract_text_from_region(pdf_path, region)
                 return (region, text)
-            # Expand right edge to include full words
-            new_x1 = max(float(w['x1']) for w in matched)
+            # Expand right edge to include full words (only page words, not form fields
+            # whose x1 spans the entire widget box)
+            page_word_x1s = [float(w['x1']) for w in matched if not w.get('_form_field')]
+            new_x1 = max(page_word_x1s) if page_word_x1s else ax1
             new_x1 = max(new_x1, ax1)  # Never shrink
             expanded = Region(
                 page=region.page,
@@ -237,7 +258,7 @@ def resolve_extraction_region(
                 height=region.height,
             )
             text = " ".join(w['text'] for w in sorted(matched, key=lambda w: (float(w['top']), float(w['x0']))))
-            return (expanded, text)
+            return (expanded, _clean_utf16_text(text))
 
         if extraction_mode == "line":
             # Find LTTextLine elements overlapping the drawn region
@@ -295,7 +316,7 @@ def resolve_extraction_region(
                 width=(bb[2] - bb[0]) / pw,
                 height=(bb[3] - bb[1]) / ph,
             )
-            text = best_block.get_text().strip()
+            text = _clean_utf16_text(best_block.get_text().strip())
             return (expanded, text)
 
     # Fallback
