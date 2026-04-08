@@ -66,6 +66,7 @@ interface AppState {
   clearPdf: () => void;
   addField: (field: Field) => void;
   removeField: (id: string) => void;
+  setFields: (fields: Field[]) => void;
   setCurrentPage: (page: number) => void;
   setTemplates: (templates: Template[]) => void;
   loadTemplate: (template: Template) => void;
@@ -246,6 +247,8 @@ export const useAppStore = create<AppState>((set) => ({
       editingFieldId: state.editingFieldId === id ? null : state.editingFieldId,
       chainEditFieldId: state.chainEditFieldId === id ? null : state.chainEditFieldId,
     })),
+
+  setFields: (fields) => set({ fields }),
 
   setCurrentPage: (page) => set({ currentPage: page }),
 
