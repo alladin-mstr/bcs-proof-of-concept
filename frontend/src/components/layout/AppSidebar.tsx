@@ -123,7 +123,7 @@ export function AppSidebar() {
                     activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
                   >
                     <Layers className="h-5 w-5" />
-                    <span>Series</span>
+                    <span>Controle reeksen</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>

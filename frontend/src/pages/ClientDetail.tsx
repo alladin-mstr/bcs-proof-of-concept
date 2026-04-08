@@ -161,15 +161,15 @@ export default function ClientDetail() {
         </CardContent>
       </Card>
 
-      {/* Series for this klant */}
+      {/* Controle reeksen voor deze klant */}
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>Series</CardTitle>
+          <CardTitle>Controle reeksen</CardTitle>
         </CardHeader>
         <CardContent>
           {series.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <p className="text-sm">Nog geen series voor deze klant</p>
+              <p className="text-sm">Nog geen controle reeksen voor deze klant</p>
             </div>
           ) : (
             <div className="space-y-2">

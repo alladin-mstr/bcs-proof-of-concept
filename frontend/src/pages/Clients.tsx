@@ -371,14 +371,14 @@ export default function Clients() {
               </CardContent>
             </Card>
 
-            {/* Series */}
+            {/* Controle reeksen */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle>Series</CardTitle>
+                <CardTitle>Controle reeksen</CardTitle>
               </CardHeader>
               <CardContent>
                 {series.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">Nog geen series</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">Nog geen controle reeksen</p>
                 ) : (
                   <div className="space-y-2">
                     {series.map((s) => (
