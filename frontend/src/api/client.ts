@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, TemplateRuleResult, ComputedField, Controle, ControleFile, ControleRunResult, FieldResult, Klant, ControleSeries, ControleSeriesRun, GlobalValueGroup } from "../types";
+import type { Template, Field, ExtractionResponse, Region, LayoutBlock, TestRun, TemplateRule, TemplateRuleResult, ComputedField, Controle, ControleFile, ControleRunResult, FieldResult, Klant, ControleSeries, ControleSeriesRun, GlobalValueGroup, GlobalValue, GlobalValuePdfTemplate, ExtractionPreview, AuditEntry } from "../types";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
@@ -404,7 +404,7 @@ export async function getGlobalValueGroup(id: string): Promise<GlobalValueGroup>
 }
 
 export async function createGlobalValueGroup(
-  data: { name: string; values: GlobalValueGroup["values"] },
+  data: { name: string; values: GlobalValueGroup["values"]; mode?: "manual" | "pdf" },
 ): Promise<GlobalValueGroup> {
   const response = await api.post("/global-values", data);
   return response.data;
@@ -420,4 +420,53 @@ export async function updateGlobalValueGroup(
 
 export async function deleteGlobalValueGroup(id: string): Promise<void> {
   await api.delete(`/global-values/${id}`);
+}
+
+export async function uploadGlobalValuePdf(
+  groupId: string,
+  file: File,
+): Promise<{ pdf_id: string; page_count: number; filename: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post(`/global-values/${groupId}/pdf`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+}
+
+export async function getGlobalValueTemplate(
+  groupId: string,
+): Promise<GlobalValuePdfTemplate> {
+  const response = await api.get(`/global-values/${groupId}/template`);
+  return response.data;
+}
+
+export async function updateGlobalValueTemplate(
+  groupId: string,
+  data: { fields: Field[] },
+): Promise<GlobalValuePdfTemplate> {
+  const response = await api.put(`/global-values/${groupId}/template`, data);
+  return response.data;
+}
+
+export async function extractGlobalValues(
+  groupId: string,
+): Promise<ExtractionPreview> {
+  const response = await api.post(`/global-values/${groupId}/extract`);
+  return response.data;
+}
+
+export async function confirmGlobalValues(
+  groupId: string,
+  values: GlobalValue[],
+): Promise<GlobalValueGroup> {
+  const response = await api.post(`/global-values/${groupId}/confirm`, { values });
+  return response.data;
+}
+
+export async function getGlobalValueAudit(
+  groupId: string,
+): Promise<AuditEntry[]> {
+  const response = await api.get(`/global-values/${groupId}/audit`);
+  return response.data;
 }
