@@ -1,4 +1,4 @@
-import { Home, Users, Settings, ChevronDown, ClipboardCheck, LogOut, BookOpen, ListChecks, Layers, MoreVertical, Sun, Moon, Monitor, BarChart3, Globe } from "lucide-react";
+import { Home, Users, Settings, ChevronDown, ClipboardCheck, LogOut, BookOpen, ListChecks, Layers, MoreVertical, Sun, Moon, Monitor, BarChart3, Globe, LayoutGrid, FilePlus2, FolderPlus, Hammer } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useTaskContext } from "@/context/TaskContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -83,11 +83,8 @@ export function AppSidebar() {
       </div>
 
       <SidebarContent className="px-3 py-4">
-        {/* Controles Section */}
+        {/* Dashboard */}
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs text-sidebar-muted font-semibold uppercase tracking-wider mb-2">
-            Controles
-          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
               <SidebarMenuItem>
@@ -103,6 +100,17 @@ export function AppSidebar() {
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Mijn controles Section */}
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-xs text-sidebar-muted font-semibold uppercase tracking-wider mb-2">
+            Mijn controles
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-1">
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <NavLink
@@ -120,10 +128,10 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/controles/resultaten"
-                    className="flex items-center gap-3 px-3 py-2.5 pl-11 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
                     activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
                   >
-                    <BarChart3 className="h-4 w-4" />
+                    <BarChart3 className="h-5 w-5" />
                     <span>Resultaten</span>
                   </NavLink>
                 </SidebarMenuButton>
@@ -132,10 +140,10 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/controles/globale-waarden"
-                    className="flex items-center gap-3 px-3 py-2.5 pl-11 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
                     activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
                   >
-                    <Globe className="h-4 w-4" />
+                    <Globe className="h-5 w-5" />
                     <span>Globale waarden</span>
                   </NavLink>
                 </SidebarMenuButton>
@@ -148,7 +156,7 @@ export function AppSidebar() {
                     activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
                   >
                     <Layers className="h-5 w-5" />
-                    <span>Controle reeksen</span>
+                    <span>Reeksen</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -168,13 +176,49 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Regelbibliotheek */}
-        <SidebarGroup className="mt-6">
+        {/* Ontwikkelen Section */}
+        <SidebarGroup className="mt-4">
           <SidebarGroupLabel className="text-xs text-sidebar-muted font-semibold uppercase tracking-wider mb-2">
-            Hulpmiddelen
+            Ontwikkelen
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/gallerij"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                  >
+                    <LayoutGrid className="h-5 w-5" />
+                    <span>Controle gallerij</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/controle/nieuw"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                  >
+                    <FilePlus2 className="h-5 w-5" />
+                    <span>Controle maken</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/controle-series/nieuw"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                  >
+                    <FolderPlus className="h-5 w-5" />
+                    <span>Reeks maken</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <NavLink

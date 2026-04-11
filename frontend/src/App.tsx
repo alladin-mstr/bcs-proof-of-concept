@@ -9,6 +9,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
+import Gallery from "./pages/Gallery";
 import Clients from "./pages/Clients";
 import ControleWizard from "./pages/ControleWizard";
 import ControleDetail from "./pages/ControleDetail";
@@ -64,6 +65,7 @@ const App = () => (
                 <Route path="/controle-series/:id/edit" element={<ProtectedPage><SeriesBuilder /></ProtectedPage>} />
                 <Route path="/controle-series/:id/run" element={<ProtectedPage><RunSeries /></ProtectedPage>} />
                 <Route path="/controle-series/:seriesId/run/:runId/step/:stepId" element={<ProtectedPage><RunSeriesStepDetail /></ProtectedPage>} />
+                <Route path="/gallerij" element={<ProtectedPage><Gallery /></ProtectedPage>} />
                 <Route path="/regels" element={<ProtectedPage><RuleLibrary /></ProtectedPage>} />
                 <Route path="/instellingen" element={<ProtectedPage><Settings /></ProtectedPage>} />
                 <Route path="/resultaten/:taskId" element={<ProtectedPage><Results /></ProtectedPage>} />

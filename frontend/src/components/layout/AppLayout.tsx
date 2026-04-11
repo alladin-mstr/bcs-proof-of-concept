@@ -25,6 +25,7 @@ const routeLabels: Record<string, { label: string; linkTo?: string }> = {
   "/controles/resultaten": { label: "Resultaten" },
   "/controles/globale-waarden": { label: "Globale waarden" },
   "/klanten": { label: "Klanten" },
+  "/gallerij": { label: "Controle gallerij" },
   "/regels": { label: "Regelbibliotheek" },
   "/instellingen": { label: "Instellingen" },
   "/resultaten": { label: "Resultaten", linkTo: "/controles" },
