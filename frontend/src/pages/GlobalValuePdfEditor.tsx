@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Upload, Play } from "lucide-react";
+import { Upload, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PdfViewer from "@/components/PdfViewer";
 import TemplatePanel from "@/components/TemplatePanel";
@@ -122,11 +122,8 @@ export default function GlobalValuePdfEditor() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between pb-4 border-b">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/controles")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
           <div>
             <h1 className="text-lg font-semibold">{group.name}</h1>
             <p className="text-sm text-muted-foreground">

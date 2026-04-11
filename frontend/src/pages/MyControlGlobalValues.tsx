@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Pencil, Trash2, FileText, Globe, MoreHorizontal } from "lucide-react";
-import GlobalValueAuditLog from "@/components/GlobalValueAuditLog";
+import { Search, Plus, Pencil, Trash2, FileText, Globe, MoreHorizontal, History } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +52,6 @@ export default function MyControlGlobalValues() {
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<GlobalValueGroup | null>(null);
   const [deletingGroup, setDeletingGroup] = useState(false);
   const [newGroupMode, setNewGroupMode] = useState<"manual" | "pdf">("manual");
-  const [auditGroupId, setAuditGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     listGlobalValueGroups().then(setGlobalGroups).catch(() => {});
@@ -323,20 +321,20 @@ export default function MyControlGlobalValues() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         {g.mode === "pdf" ? (
-                          <>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/global-values/${g.id}/edit`); }}>
-                              Velden bewerken
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setAuditGroupId(g.id); }}>
-                              Geschiedenis
-                            </DropdownMenuItem>
-                          </>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/global-values/${g.id}/edit`); }}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Velden bewerken
+                          </DropdownMenuItem>
                         ) : (
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingGroup({ id: g.id, name: g.name, values: g.values }); }}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Bewerken
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/controles/globale-waarden/${g.id}/audit`); }}>
+                          <History className="h-4 w-4 mr-2" />
+                          Audit trail
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
@@ -362,8 +360,6 @@ export default function MyControlGlobalValues() {
           </Table>
         </CardContent>
       </Card>
-
-      <GlobalValueAuditLog groupId={auditGroupId} onClose={() => setAuditGroupId(null)} />
 
       {/* Delete group confirmation */}
       <AlertDialog open={!!deleteGroupTarget} onOpenChange={(open) => !open && setDeleteGroupTarget(null)}>

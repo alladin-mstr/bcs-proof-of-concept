@@ -23,7 +23,8 @@ const routeLabels: Record<string, { label: string; linkTo?: string }> = {
   "/controle/nieuw": { label: "Nieuwe controle" },
   "/controles": { label: "Controles" },
   "/controles/resultaten": { label: "Resultaten" },
-  "/controles/globale-waarden": { label: "Globale waarden" },
+  "/controles/globale-waarden": { label: "Globale waarden", linkTo: "/controles/globale-waarden" },
+  "/global-values": { label: "Globale waarden", linkTo: "/controles/globale-waarden" },
   "/klanten": { label: "Klanten" },
   "/gallerij": { label: "Controle gallerij" },
   "/regels": { label: "Regelbibliotheek" },
@@ -35,6 +36,7 @@ const segmentLabels: Record<string, string> = {
   run: "Uitvoeren",
   edit: "Bewerken",
   nieuw: "Nieuwe controle",
+  audit: "Audit trail",
 };
 
 function AppBreadcrumbs() {

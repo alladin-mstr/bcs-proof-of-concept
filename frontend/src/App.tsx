@@ -21,6 +21,7 @@ import MyControls from "./pages/MyControls";
 import MyControlResults from "./pages/MyControlResults";
 import MyControlGlobalValues from "./pages/MyControlGlobalValues";
 import GlobalValuePdfEditor from "./pages/GlobalValuePdfEditor";
+import GlobalValueAuditTrail from "./pages/GlobalValueAuditTrail";
 import SeriesBuilder from "./pages/SeriesBuilder";
 import SeriesDetail from "./pages/SeriesDetail";
 import RunSeries from "./pages/RunSeries";
@@ -59,6 +60,7 @@ const App = () => (
                 <Route path="/controles/resultaten" element={<ProtectedPage><MyControlResults /></ProtectedPage>} />
                 <Route path="/controles/globale-waarden" element={<ProtectedPage><MyControlGlobalValues /></ProtectedPage>} />
                 <Route path="/global-values/:id/edit" element={<ProtectedPage><GlobalValuePdfEditor /></ProtectedPage>} />
+                <Route path="/controles/globale-waarden/:id/audit" element={<ProtectedPage><GlobalValueAuditTrail /></ProtectedPage>} />
                 <Route path="/controle-series" element={<ProtectedPage><SeriesList /></ProtectedPage>} />
                 <Route path="/controle-series/nieuw" element={<ProtectedPage><SeriesBuilder /></ProtectedPage>} />
                 <Route path="/controle-series/:id" element={<ProtectedPage><SeriesDetail /></ProtectedPage>} />
