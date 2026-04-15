@@ -132,7 +132,7 @@ export function AppSidebar() {
                     activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
                   >
                     <BarChart3 className="h-5 w-5" />
-                    <span>Resultaten</span>
+                    <span>Geschiedenis</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>

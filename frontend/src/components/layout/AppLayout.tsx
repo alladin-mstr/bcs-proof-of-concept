@@ -22,14 +22,14 @@ const routeLabels: Record<string, { label: string; linkTo?: string }> = {
   "/controle": { label: "Controles", linkTo: "/controles" },
   "/controle/nieuw": { label: "Nieuwe controle" },
   "/controles": { label: "Controles" },
-  "/controles/resultaten": { label: "Resultaten" },
+  "/controles/resultaten": { label: "Geschiedenis" },
   "/controles/globale-waarden": { label: "Globale waarden", linkTo: "/controles/globale-waarden" },
   "/global-values": { label: "Globale waarden", linkTo: "/controles/globale-waarden" },
   "/klanten": { label: "Klanten" },
   "/gallerij": { label: "Controle gallerij" },
   "/regels": { label: "Regelbibliotheek" },
   "/instellingen": { label: "Instellingen" },
-  "/resultaten": { label: "Resultaten", linkTo: "/controles" },
+  "/resultaten": { label: "Geschiedenis", linkTo: "/controles" },
 };
 
 const segmentLabels: Record<string, string> = {
