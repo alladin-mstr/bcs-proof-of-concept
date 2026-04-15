@@ -139,18 +139,6 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <NavLink
-                    to="/controles/globale-waarden"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
-                  >
-                    <Globe className="h-5 w-5" />
-                    <span>Globale waarden</span>
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink
                     to="/controle-series"
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
                     activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
@@ -228,6 +216,18 @@ export function AppSidebar() {
                   >
                     <BookOpen className="h-5 w-5" />
                     <span>Regelbibliotheek</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to="/controles/globale-waarden"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    activeClassName="bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                  >
+                    <Globe className="h-5 w-5" />
+                    <span>Globale waarden</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
